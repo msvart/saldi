@@ -1,12 +1,12 @@
 <?php
 
- // 20250130 migrate utf8_en-/decode() to mb_convert_encoding
- // 20250829 PHR Returns textId if table tekster doeesn't exist
- // 20250909 LOE checks first that db functions exist and error log added
+// 20250130 migrate utf8_en-/decode() to mb_convert_encoding
+// 20250829 PHR Returns textId if table tekster doeesn't exist
+// 20250909 LOE checks first that db functions exist and error log added
 if (!function_exists('findtekst')) {
 	function findtekst($textId, $languageID) {
-		
-	$sessionVar = 'text_'. $textId .'_'. $languageID;
+
+		$sessionVar = 'text_'. $textId .'_'. $languageID;
 #	if (isset($_SESSION[$sessionVar])) return ($_SESSION[$sessionVar]);
 
 		global $bruger_id;
@@ -19,49 +19,53 @@ if (!function_exists('findtekst')) {
 			list($a,$b) = explode('|',$textId);
 			if (preg_match('/^[0-9]+$/', $a)) $textId = $a;
 		} #else $a = $textId;
-		 $qtxt = "SELECT column_name FROM information_schema.columns WHERE table_name='tekster'";
+		$qtxt = "SELECT column_name FROM information_schema.columns WHERE table_name='tekster'";
 		// if (!$r = db_fetch_array(db_select($qtxt, __FILE__ . " linje " . __LINE__))) {
 		// 	if ($b) return $b;
 		// 	else return $textId;
 		// }
 
 		########################
-		if (function_exists('db_fetch_array') && function_exists('db_select')) {
+		global $connection; // Make sure we have access to the global connection variable
+
+		if (function_exists('db_fetch_array') && function_exists('db_select') && isset($connection) && $connection) {
 			if (!$r = db_fetch_array(db_select($qtxt, __FILE__ . " linje " . __LINE__))) {
 				if ($b) return $b;
 				else return $textId;
 			}
 		} else {
+			// Handle cases where DB connection is missing (e.g., during install)
+			if ($b) return $b;
 			// Handle the error gracefully if the function doesn't exist
-			error_log("Missing required database functions: db_fetch_array or db_select, textId: $textId");
-			return $textId; 
+			error_log("Missing required database functions or connection: db_fetch_array or db_select, textId: $textId");
+			return $textId;
 		}
 		######################
 
 		if (!preg_match('/^[0-9]+$/', $textId)) {
-		$qtxt = "select tekst_id from tekster where tekst = '$textId'";
-		if ($r = db_fetch_array(db_select($qtxt, ''))) {
-			$textId = $r['tekst_id'];
-		} else {
-			$txtlines = array();
-			if (file_exists("../importfiler/egnetekster.csv")) $fileName = "../importfiler/egnetekster.csv";
-			else $fileName = "../importfiler/tekster.csv";
-			$txtlines = explode("\n",file_get_contents($fileName));
-			for ($i = 0; $i < count($txtlines); $i++) {
-				$texts = explode("\t",$txtlines[$i]);
-				if (in_array($textId,$texts)) {
-					for ($i2 = 1; $i2 < count($texts); $i2++) {
-						if ($textId == $texts[$i2]) $textId = $texts[0];
-						break 2;
+			$qtxt = "select tekst_id from tekster where tekst = '$textId'";
+			if ($r = db_fetch_array(db_select($qtxt, ''))) {
+				$textId = $r['tekst_id'];
+			} else {
+				$txtlines = array();
+				if (file_exists("../importfiler/egnetekster.csv")) $fileName = "../importfiler/egnetekster.csv";
+				else $fileName = "../importfiler/tekster.csv";
+				$txtlines = explode("\n",file_get_contents($fileName));
+				for ($i = 0; $i < count($txtlines); $i++) {
+					$texts = explode("\t",$txtlines[$i]);
+					if (in_array($textId,$texts)) {
+						for ($i2 = 1; $i2 < count($texts); $i2++) {
+							if ($textId == $texts[$i2]) $textId = $texts[0];
+							break 2;
+						}
 					}
 				}
 			}
 		}
-	}
 
-	if (!preg_match('/^[0-9]+$/', $textId)) {
-		return $textId; # If other characters than digits in textID then return textID - used when developing # 20230224
-	}
+		if (!preg_match('/^[0-9]+$/', $textId)) {
+			return $textId; # If other characters than digits in textID then return textID - used when developing # 20230224
+		}
 		#echo "L $languageID B $bruger_id<br>";
 
 		$linje = $newTxt = $tekst = $tmp = NULL;

@@ -19,48 +19,44 @@ The repository includes various directories and files essential for the system's
 
 The system is primarily documented in Danish, and currently, most of it have been translated to English and Norse. Danish-speaking users can refer to the [`LAESMIG.txt`](LAESMIG.txt) file included in the repository for more information.
 
-## Getting Started
-
-To use SALDI, clone the repository:
-
-
 ## Installation
-
-Choose one of the following methods:
 
 ### Docker (Recommended)
 
 SALDI is available as a Docker image: `danosoft/saldi:latest`
 
-#### Quick start
+#### Production Setup
 
-1. Create a folder for SALDI and copy the files you need:
+No need to clone the repository. Just download two files:
 
+1. Choose your setup:
+
+| Option | Use when |
+|--------|----------|
+| `docker-compose.prod-psql.yml` | You want SALDI to run its own PostgreSQL database |
+| `docker-compose.prod-nosql.yml` | You have an existing database server (PostgreSQL or MySQL) |
+
+2. Create a folder and download the compose file and environment template:
+
+**With bundled PostgreSQL (recommended for new installations):**
 ```bash
 mkdir saldi && cd saldi
+curl -O https://raw.githubusercontent.com/DANOSOFT/saldi/master/docker/docker-compose/docker-compose.prod-psql.yml
+curl -O https://raw.githubusercontent.com/DANOSOFT/saldi/master/docker/docker-compose/.env.example
+mv docker-compose.prod-psql.yml docker-compose.yml
+mv .env.example .env
 ```
 
-2. Copy a compose file from [docker/docker-compose/](docker/docker-compose/) to your folder and rename it.
-   This folder contains all compose examples and the [.env.example](docker/docker-compose/.env.example) file:
-
-| Source file | Use case |
-|-------------|----------|
-| [docker-compose.prod-psql.yml](docker/docker-compose/docker-compose.prod-psql.yml) | Production with bundled PostgreSQL 15 database |
-| [docker-compose.prod-nosql.yml](docker/docker-compose/docker-compose.prod-nosql.yml) | Production with your own external database |
-| [docker-compose.dev-psql.yml](docker/docker-compose/docker-compose.dev-psql.yml) | Development with bundled PostgreSQL (mounts source code) |
-| [docker-compose.dev-nosql.yml](docker/docker-compose/docker-compose.dev-nosql.yml) | Development with external database (mounts source code) |
-
+**With external database:**
 ```bash
-cp docker-compose.prod-psql.yml docker-compose.yml
+mkdir saldi && cd saldi
+curl -O https://raw.githubusercontent.com/DANOSOFT/saldi/master/docker/docker-compose/docker-compose.prod-nosql.yml
+curl -O https://raw.githubusercontent.com/DANOSOFT/saldi/master/docker/docker-compose/.env.example
+mv docker-compose.prod-nosql.yml docker-compose.yml
+mv .env.example .env
 ```
 
-3. Copy and configure the environment file:
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` with your settings:
+3. Edit `.env` with your settings:
 
 ```env
 SALDI_DOCKER=1          # Required - enables Docker mode
@@ -80,25 +76,36 @@ docker compose up -d
 
 5. Open http://localhost:8080 (or your configured SALDI_PORT) to complete the setup wizard.
 
-#### Images used
+#### Available compose files
 
-- `danosoft/saldi:latest` - SALDI application (PHP 8.2 + Apache)
-- `postgres:15` - PostgreSQL database (only with psql configurations)
+| File | Use case |
+|------|----------|
+| [docker-compose.prod-psql.yml](docker/docker-compose/docker-compose.prod-psql.yml) | Production with bundled PostgreSQL 15 |
+| [docker-compose.prod-nosql.yml](docker/docker-compose/docker-compose.prod-nosql.yml) | Production with external database |
 
-#### Persistent data
+#### Development Setup
 
-These directories are created automatically for your data:
-- `saldibilag/` - Uploaded documents
-- `backup/` - Database backups
-- `saldi_logolib/` - Company logos
+For development, clone the repository to get source code access:
+
+```bash
+git clone https://github.com/DANOSOFT/saldi.git
+cd saldi/docker/docker-compose
+cp .env.example .env
+# Edit .env with your settings
+docker compose -f docker-compose.dev-psql.yml up -d
+```
+
+Development compose files mount the source code for live editing:
+- [docker-compose.dev-psql.yml](docker/docker-compose/docker-compose.dev-psql.yml)
+- [docker-compose.dev-nosql.yml](docker/docker-compose/docker-compose.dev-nosql.yml)
 
 #### More information
 
-See [docker/README.md](docker/README.md) for detailed Docker documentation, including environment variables, troubleshooting, and how Docker mode works.
+See [docker/README.md](docker/README.md) for detailed documentation on environment variables, troubleshooting, and how Docker mode works.
 
 ### Manual Installation
 
-See [INSTALLATION.txt](INSTALLATION.txt) for traditional server setup.
+For traditional server setup without Docker, clone the repository and follow [INSTALLATION.txt](INSTALLATION.txt):
 
 ```bash
 git clone https://github.com/DANOSOFT/saldi.git

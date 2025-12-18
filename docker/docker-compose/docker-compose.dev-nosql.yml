@@ -5,7 +5,7 @@ services:
       dockerfile: ../Dockerfile
     container_name: saldi_app_dev
     ports:
-      - "8080:80"
+      - "${SALDI_PORT:-8080}:80"
     environment:
       SALDI_DOCKER: ${SALDI_DOCKER:?set SALDI_DOCKER}
       DB_TYPE: ${DB_TYPE:?set DB_TYPE}

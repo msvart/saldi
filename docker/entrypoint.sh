@@ -65,9 +65,9 @@ if (!function_exists('saldi_redirect_to_install')) {
 	function saldi_redirect_to_install() {
 		\$url = "/index/install.php";
 
-		// CLI: fail fast with a clear hint (install flow is web-based)
+		// CLI: redirect to web installer
 		if (PHP_SAPI === 'cli') {
-			fwrite(STDERR, "SALDI er ikke initialiseret endnu. Åbn \$url i browseren.\\n");
+			fwrite(STDERR, "SALDI not initialized. Open \$url in browser to run installer.\\n");
 			exit(1);
 		}
 

@@ -47,14 +47,14 @@ ob_start(); //Starter output buffering
     <?php
     $dockerMode = (getenv('SALDI_DOCKER') === '1');
 
-    // I Docker findes connect.php typisk altid (autogenereret fra env vars).
-    // For klassiske (ikke-Docker) installationer bruger vi fortsat connect.php som "installeret"-markør.
+    // In Docker, connect.php is auto-generated from env vars so we can't use it as install marker.
+    // For traditional installs we still check for connect.php to detect existing installation.
     if (file_exists("../includes/connect.php") && !$dockerMode) {
         print "<meta http-equiv=\"refresh\" content=\"0;URL=index.php\">";
         exit;
     }
 
-    // I Docker: Redirect kun hvis schema allerede er på plads (forhindrer geninstall/overskrivning).
+    // Docker mode: only redirect if schema exists, otherwise show installer
     if ($dockerMode) {
         $envDbType = strtolower(getenv('DB_TYPE') ?: 'postgresql');
         $envHost = getenv('DB_HOST') ?: '';
@@ -306,7 +306,7 @@ ob_start(); //Starter output buffering
             if (!mysqli_select_db($connection,$db_navn)) die( "Kan ikke vælge MySQL database\n");
         } else {
             if (db_exists($db_navn)) {
-                // DB findes allerede (fx auto-oprettet af Docker/Postgres). Vi installerer kun hvis schema er tomt.
+                // DB already exists (e.g. created by Docker/Postgres), just connect to it
                 db_close($connection);
                 $connection = db_connect ("$db_host", "$db_bruger", "$db_password", "$db_navn");
             } else {

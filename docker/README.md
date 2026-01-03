@@ -112,3 +112,21 @@ The entrypoint script adjusts www-data UID/GID to match the mounted volume owner
 
 ### Redirect loop on install page
 This usually means the schema check is failing. Check database connectivity and that the database exists.
+
+## Database Import
+
+Import a PostgreSQL dump into a running instance.
+
+### System Service
+
+```bash
+psql -U postgres < dump.sql
+```
+
+### Docker Container
+
+```bash
+docker exec -i <container_name> psql -U postgres < dump.sql
+```
+
+**Note:** For large dumps, use `tmux` or `screen` to prevent interruption.

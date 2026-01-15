@@ -15,7 +15,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
     volumes:
       # Dev: Mount source code for live editing
-      - ./src:/var/www/html
+      - ../../src:/var/www/html
 
       # Persistent data mounts
       - ./saldibilag:/var/www/html/saldibilag

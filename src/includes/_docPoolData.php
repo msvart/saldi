@@ -1,5 +1,10 @@
 <?php
 #Begin afresh
+// Prevent caching of this JSON response to ensure fresh file list
+header('Cache-Control: no-cache, no-store, must-revalidate');
+header('Pragma: no-cache');
+header('Expires: 0');
+
 ob_clean();
 ob_start();
 
@@ -116,7 +121,8 @@ ob_start();
                 $subject = trim($lines[0] ?? '') !== '' ? trim($lines[0]) : $base;//default to filename
                 $account        = $lines[1] ?? '';
                 $amount         = $lines[2] ?? '';
-                $insertedDate   = $lines[3] ?? $modDate1; 
+                // Use line 3 for date, but fall back to file mod time if empty
+                $insertedDate   = (isset($lines[3]) && trim($lines[3]) !== '') ? trim($lines[3]) : $modDate1; 
                 
             }
 
@@ -155,10 +161,15 @@ ob_start();
                 // Rename .pdf file if it exists and the target doesn't exist
                 if (file_exists($originalPdfFile) && !file_exists($newPdfFile)) {
                     if (rename($originalPdfFile, $newPdfFile)) {
+                        // IMPORTANT: Update $file to reflect the new filename, so the href uses the correct name
+                        $file = $safeSubject . '.pdf';
                     } else {
                         
                         error_log("Failed to rename .pdf file to: $newPdfFile. PHP must be able to write to the directory.");
                     }
+                } elseif (file_exists($newPdfFile)) {
+                    // The file was already renamed in a previous request, update $file to match
+                    $file = $safeSubject . '.pdf';
                 }
 
                 // Update the first line of the .info file to the sanitized subject
@@ -219,7 +230,12 @@ ob_start();
         $fil_nr++;
         #$hreftxt = "../includes/documents.php?$params&docFocus=$fil_nr&poolFile=" . urlencode($file);
 
-        $hreftxt = "../includes/documents.php?$params&$poolParams&docFocus=$fil_nr&poolFile=" . urlencode($file);
+        // Remove any existing poolFile from poolParams to avoid duplicate parameters
+        // PHP $_GET only gets one value when there are duplicates, so we need to ensure
+        // only the correct poolFile (the clicked file) is in the URL
+        $cleanPoolParams = preg_replace('/&?poolFile=[^&]*/', '', $poolParams);
+        $cleanPoolParams = ltrim($cleanPoolParams, '&'); // Remove leading & if present
+        $hreftxt = "../includes/documents.php?$params&$cleanPoolParams&docFocus=$fil_nr&poolFile=" . urlencode($file);
         $data[] = [
             'filename' => $file,
             'subject' => $subject,
@@ -232,13 +248,12 @@ ob_start();
 
     }
 
-header('Content-Type: application/json');
-echo json_encode($data);
-
-// clear output
+// Clear any previous output and send proper JSON
 ob_end_clean();
 header('Content-Type: application/json');
-usort($data, fn($a, $b) => strcmp($b['date'], $a['date'])); // Default sort by date DESC
+
+// Sort by date DESC before sending
+usort($data, fn($a, $b) => strcmp($b['date'], $a['date']));
 
 echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 

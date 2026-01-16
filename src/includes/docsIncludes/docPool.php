@@ -58,11 +58,29 @@ function docPool($sourceId,$source,$kladde_id,$bilag,$fokus,$poolFile,$docFolder
 	$sum         = if_isset($_POST,NULL,'sum');
 
 	if ($insertFile) {
-		#if(!isset($dato )&& isset($newDate)) {
+		// Debug: Log all POST values we receive
+		error_log("docPool INSERT - sourceId: " . ($sourceId ?? 'NOT SET'));
+		error_log("docPool INSERT - newDate: " . ($newDate ?? 'NOT SET'));
+		error_log("docPool INSERT - newAmount: " . ($newAmount ?? 'NOT SET'));
+		
+		// Only set date from pool file if sourceId is empty (new entry) and newDate is valid
+		if (!$sourceId && $newDate && strtotime($newDate) !== false && strtotime($newDate) > 0) {
 			$formattedDate = date("d-m-Y", strtotime($newDate));
 			$dato = $formattedDate;
-			$_POST['dato']=$dato;
-		#}
+			$_POST['dato'] = $dato;
+			error_log("docPool INSERT - Setting date from pool file: newDate=$newDate, formatted=$formattedDate");
+		} else {
+			error_log("docPool INSERT - NOT setting date. sourceId=$sourceId, newDate=$newDate, strtotime result=" . (strtotime($newDate ?? '') ?: 'false'));
+		}
+		
+		// Only set amount from pool file if sourceId is empty (new entry) and newAmount is set
+		if (!$sourceId && $newAmount) {
+			$sum = $newAmount;
+			$_POST['sum'] = $sum;
+			error_log("docPool INSERT - Setting amount from pool file: newAmount=$newAmount");
+		} else {
+			error_log("docPool INSERT - NOT setting amount. sourceId=$sourceId, newAmount=$newAmount");
+		}
 		
 		// Debug logging - log what we receive
 		error_log("docPool INSERT - POST poolFiles: " . (isset($_POST['poolFiles']) ? $_POST['poolFiles'] : 'NOT SET'));
@@ -112,6 +130,35 @@ function docPool($sourceId,$source,$kladde_id,$bilag,$fokus,$poolFile,$docFolder
 		$poolFiles = array_filter($poolFiles);
 		
 		if (!empty($poolFiles)) {
+			// If date/amount wasn't passed from JavaScript, try to read from .info file of first selected file
+			if (!$sourceId && empty($newDate) && !empty($poolFiles)) {
+				$firstPoolFile = reset($poolFiles);
+				$baseName = pathinfo($firstPoolFile, PATHINFO_FILENAME);
+				$infoFile = "$docFolder/$db/pulje/$baseName.info";
+				error_log("docPool INSERT - Trying to read .info file: $infoFile");
+				
+				if (file_exists($infoFile)) {
+					$infoLines = file($infoFile, FILE_IGNORE_NEW_LINES);
+					// Line 0: subject, Line 1: account, Line 2: amount, Line 3: date
+					if (isset($infoLines[3]) && !empty(trim($infoLines[3]))) {
+						$infoDate = trim($infoLines[3]);
+						// Try to parse the date
+						$timestamp = strtotime($infoDate);
+						if ($timestamp !== false && $timestamp > 0) {
+							$formattedDate = date("d-m-Y", $timestamp);
+							$_POST['dato'] = $formattedDate;
+							error_log("docPool INSERT - Got date from .info file: $infoDate -> $formattedDate");
+						}
+					}
+					if (isset($infoLines[2]) && !empty(trim($infoLines[2])) && empty($newAmount)) {
+						$_POST['sum'] = trim($infoLines[2]);
+						error_log("docPool INSERT - Got amount from .info file: " . $_POST['sum']);
+					}
+				} else {
+					error_log("docPool INSERT - .info file not found: $infoFile");
+				}
+			}
+			
 			// Process multiple files
 			$isMultiple = count($poolFiles) > 1;
 			$processedCount = 0;
@@ -694,19 +741,9 @@ function docPool($sourceId,$source,$kladde_id,$bilag,$fokus,$poolFile,$docFolder
 		$backUrl = "../debitor/historikkort.php?id=$sourceId&fokus=$fokus";
 	}
 	// Print header banner
-	
-	if ($menu=='S') {
-		// Modern header - wrapped in table like other topLine files
+	if ($menu == 'S') {
 		print "<table id='topBarHeader' width=\"100%\" align=\"center\" border=\"0\" cellspacing=\"2\" cellpadding=\"0\"><tbody>";
 		include("docsIncludes/topLineDocuments.php");
-		print "</tbody></table>";
-	} else {
-		print "<table id='topBarHeader' width=\"100%\" align=\"center\" border=\"0\" cellspacing=\"2\" cellpadding=\"0\" style=\"margin-bottom: 10px; margin-top: 10px;\"><tbody>";
-		print "<tr>";
-		print "<td width='10%' $top_bund><font face='Helvetica, Arial, sans-serif' color='#000066'><a href='$backUrl' accesskey='L' style='cursor: pointer;'>".findtekst('30|Tilbage', $sprog_id)."</a></td>";
-		print "<td width='80%' $top_bund><font face='Helvetica, Arial, sans-serif' color='#000066'>".findtekst('1408|Kassebilag', $sprog_id)."</td>";
-		print "<td width='10%' $top_bund><font face='Helvetica, Arial, sans-serif' color='#000066'><br></td>";
-		print "</tr>";
 		print "</tbody></table>";
 	}
 	
@@ -718,8 +755,18 @@ function docPool($sourceId,$source,$kladde_id,$bilag,$fokus,$poolFile,$docFolder
 	}
 	print "<link rel=\"stylesheet\" type=\"text/css\" href=\"$cssPath/docpool-variables.css\">\n";
 	print "<link rel=\"stylesheet\" type=\"text/css\" href=\"$cssPath/docpool.css\">\n";
-	// Include Font Awesome for icons
-	print "<link href='https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css' rel='stylesheet'>\n";
+	// SVG icon definitions (inline SVGs from iconsvg.xyz style)
+	print "<style>
+		.icon-svg { display: inline-block; width: 1em; height: 1em; vertical-align: -0.125em; fill: none; stroke: currentColor; }
+		.icon-svg-sm { width: 14px; height: 14px; }
+		.icon-svg-md { width: 16px; height: 16px; }
+		.icon-svg-lg { width: 20px; height: 20px; }
+		.icon-spin { animation: icon-spin 1s linear infinite; }
+		@keyframes icon-spin {
+			from { transform: rotate(0deg); }
+			to { transform: rotate(360deg); }
+		}
+	</style>\n";
 	
 	// Add dynamic CSS variables for button colors
 	$lightButtonColor = brightenColor($buttonColor, 0.6);
@@ -739,7 +786,7 @@ function docPool($sourceId,$source,$kladde_id,$bilag,$fokus,$poolFile,$docFolder
 		#topBarHeader tbody tr td button:hover,
 		#topBarHeader tbody tr td button:focus,
 		#topBarHeader tbody tr td button:active {
-			background-color: $buttonColor !important;
+			// background-color: $buttonColor !important;
 			color: $buttonTxtColor !important;
 			border-color: $buttonColor !important;
 		}
@@ -760,6 +807,24 @@ function docPool($sourceId,$source,$kladde_id,$bilag,$fokus,$poolFile,$docFolder
 #####
 // Modern flexbox layout instead of tables
 // Styles are now in docpool.css
+// Define SVG icons as PHP variables for use in HTML
+$svgStar = '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>';
+$svgCheck = '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>';
+$svgCalendar = '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><path d="M9 16l2 2 4-4"></path></svg>';
+$svgPlus = '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>';
+$svgPointer = '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 14a8 8 0 0 1-8 8"></path><path d="M18 11v-1a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"></path><path d="M14 10V9a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v1"></path><path d="M10 9.5V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v10"></path><path d="M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"></path></svg>';
+$svgPencil = '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>';
+$svgTrash = '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>';
+$svgSave = '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>';
+$svgX = '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+$svgTable = '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>';
+$svgGrid = '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>';
+$svgUpload = '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>';
+$svgChevronDown = '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+$svgSpinner = '<svg class="icon-svg icon-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>';
+$svgLink = '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>';
+$svgFile = '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>';
+
 print "<div id='docPoolContainer'>";
 print "<div id='leftPanel'>";
 
@@ -803,6 +868,25 @@ if ($source == 'kassekladde' && $sourceId) {
 	print "</tbody></table>";
 }
 
+// View mode toggle and search box
+print "<div id='docPoolToolbar' style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding: 8px; background-color: #f8f9fa; border-radius: 6px;'>";
+// Search box
+print "<div style='flex: 1; margin-right: 10px;'>";
+print "<input type='text' id='poolSearchBox' placeholder='Søg...' oninput='filterPoolFiles()' style='width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; box-sizing: border-box;'>";
+print "</div>";
+// View mode toggle
+print "<div style='display: flex; gap: 4px;'>";
+print "<button type='button' id='tableViewBtn' onclick='setViewMode(\"table\")' title='Tabelvisning' style='padding: 8px 12px; background-color: $buttonColor; color: $buttonTxtColor; border: none; border-radius: 4px 0 0 4px; cursor: pointer; font-size: 14px;'>$svgTable</button>";
+print "<button type='button' id='cardViewBtn' onclick='setViewMode(\"card\")' title='Kortvisning' style='padding: 8px 12px; background-color: #e9ecef; color: #495057; border: none; border-radius: 0 4px 4px 0; cursor: pointer; font-size: 14px;'>$svgGrid</button>";
+print "</div>";
+print "</div>";
+
+// Preview popup container (for card view hover)
+print "<div id='previewPopup' style='display: none; position: fixed; z-index: 99999; background: white; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); padding: 10px; max-width: 500px; max-height: 600px; overflow: hidden;'>";
+print "<div id='previewTitle' style='padding: 8px; background: $buttonColor; color: $buttonTxtColor; border-radius: 4px 4px 0 0; margin: -10px -10px 10px -10px; font-size: 12px; font-weight: bold;'>Forhåndsvisning</div>";
+print "<div id='previewContent'><div style='display: flex; align-items: center; justify-content: center; width: 480px; height: 550px; background: #f5f5f5; color: #666; font-size: 14px;'>Indlæser...</div></div>";
+print "</div>";
+
 print "<div id='fileListContainer'>Loading files...</div>";
 // Fixed bottom section will be added here later via PHP (before leftPanel closes)
 
@@ -811,6 +895,7 @@ print "<div id='fileListContainer'>Loading files...</div>";
 $encodedDir = urlencode($dir);
 $poolFileJs = json_encode($poolFile); // safely escapes quotes
 $JsSum = json_encode($sum); // safely escapes quotes
+$JsDato = json_encode($dato); // kassekladde date for matching
 
 
 // Calculate lightened button color using PHP function from topline_settings.php
@@ -830,9 +915,189 @@ print <<<JS
 		const urlParams = new URLSearchParams(window.location.search);
 		const poolFile = urlParams.get('poolFile') || null;
 		const totalSum = {$JsSum};
+		const targetDate = {$JsDato}; // kassekladde date for matching
 		const buttonColor = {$buttonColorJs};
 		const buttonTxtColor = {$buttonTxtColorJs};
 		const lightButtonColor = {$lightButtonColorJs};
+		
+		// View mode state (table or card) - default to table, save preference in localStorage
+		let viewMode = localStorage.getItem('docPoolViewMode') || 'table';
+		let searchFilter = '';
+		let previewTimeout = null;
+		let currentPreviewPath = null;
+		const docFolder = '{$docFolder}';
+		const db = '{$db}';
+		
+		// SVG icons for JavaScript use
+		const svgIcons = {
+			star: '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>',
+			check: '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>',
+			calendar: '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><path d="M9 16l2 2 4-4"></path></svg>',
+			plus: '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>',
+			pointer: '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 14a8 8 0 0 1-8 8"></path><path d="M18 11v-1a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"></path><path d="M14 10V9a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v1"></path><path d="M10 9.5V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v10"></path><path d="M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"></path></svg>',
+			pencil: '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>',
+			trash: '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>',
+			save: '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>',
+			x: '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>',
+			file: '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>'
+		};
+		
+		// Initialize view mode toggle buttons on page load
+		document.addEventListener('DOMContentLoaded', function() {
+			updateViewModeButtons();
+			updatePanelLayout();
+		});
+		
+		// Set view mode and re-render
+		window.setViewMode = function(mode) {
+			viewMode = mode;
+			localStorage.setItem('docPoolViewMode', mode);
+			updateViewModeButtons();
+			updatePanelLayout();
+			renderCurrentView();
+		};
+		
+		// Update toggle button styles
+		function updateViewModeButtons() {
+			const tableBtn = document.getElementById('tableViewBtn');
+			const cardBtn = document.getElementById('cardViewBtn');
+			if (tableBtn && cardBtn) {
+				if (viewMode === 'table') {
+					tableBtn.style.backgroundColor = buttonColor;
+					tableBtn.style.color = buttonTxtColor;
+					cardBtn.style.backgroundColor = '#e9ecef';
+					cardBtn.style.color = '#495057';
+				} else {
+					cardBtn.style.backgroundColor = buttonColor;
+					cardBtn.style.color = buttonTxtColor;
+					tableBtn.style.backgroundColor = '#e9ecef';
+					tableBtn.style.color = '#495057';
+				}
+			}
+		}
+		
+		// Update panel layout based on view mode (hide right panel in card mode)
+		function updatePanelLayout() {
+			const leftPanel = document.getElementById('leftPanel');
+			const rightPanel = document.getElementById('rightPanel');
+			const resizer = document.getElementById('resizer');
+			
+			if (viewMode === 'card') {
+				// Card mode: hide right panel and resizer, make left panel full width
+				if (rightPanel) rightPanel.style.display = 'none';
+				if (resizer) resizer.style.display = 'none';
+				if (leftPanel) {
+					leftPanel.style.flex = '1 1 100%';
+					leftPanel.style.maxWidth = '100%';
+				}
+			} else {
+				// Table mode: show right panel and resizer, restore split layout
+				if (rightPanel) rightPanel.style.display = 'flex';
+				if (resizer) resizer.style.display = 'block';
+				if (leftPanel) {
+					leftPanel.style.flex = '0 0 35%';
+					leftPanel.style.maxWidth = '50%';
+				}
+			}
+			
+			// Update fixed div after layout change
+			if (typeof updateFixedDiv === 'function') {
+				setTimeout(updateFixedDiv, 100);
+			}
+		}
+		
+		// Render based on current view mode
+		function renderCurrentView() {
+			if (viewMode === 'card') {
+				renderFilesCard();
+			} else {
+				renderFiles();
+			}
+		}
+		
+		// Filter pool files based on search input
+		window.filterPoolFiles = function() {
+			const searchBox = document.getElementById('poolSearchBox');
+			searchFilter = searchBox ? searchBox.value.toLowerCase() : '';
+			renderCurrentView();
+		};
+		
+		// Preview popup functions for card view
+		window.showPreview = function(element, event) {
+			const filepath = element.getAttribute('data-filepath');
+			const filename = element.getAttribute('data-filename');
+			
+			if (!filepath) return;
+			
+			// Clear any existing timeout
+			if (previewTimeout) clearTimeout(previewTimeout);
+			
+			// Delay showing preview slightly to avoid flickering
+			previewTimeout = setTimeout(function() {
+				const popup = document.getElementById('previewPopup');
+				const content = document.getElementById('previewContent');
+				const title = document.getElementById('previewTitle');
+				
+				// Only reload if different file
+				if (currentPreviewPath !== filepath) {
+					currentPreviewPath = filepath;
+					if (title) title.textContent = filename || 'Forhåndsvisning';
+					
+					// Check file extension
+					const ext = filepath.split('.').pop().toLowerCase();
+					
+					if (ext === 'pdf') {
+						content.innerHTML = '<embed src=\"' + filepath + '#pagemode=none\" type=\"application/pdf\" style=\"width:480px;height:550px;\">';
+					} else if (['jpg', 'jpeg', 'png', 'gif'].indexOf(ext) !== -1) {
+						content.innerHTML = '<img src=\"' + filepath + '\" style=\"max-width:480px;max-height:550px;display:block;margin:0 auto;\">';
+					} else {
+						content.innerHTML = '<div style=\"display:flex;align-items:center;justify-content:center;width:480px;height:550px;background:#f5f5f5;color:#666;font-size:14px;\">Forhåndsvisning ikke tilgængelig</div>';
+					}
+				}
+				
+				if (popup) {
+					popup.style.display = 'block';
+					movePreview(event);
+				}
+			}, 300);
+		};
+		
+		window.hidePreview = function() {
+			if (previewTimeout) {
+				clearTimeout(previewTimeout);
+				previewTimeout = null;
+			}
+			const popup = document.getElementById('previewPopup');
+			if (popup) popup.style.display = 'none';
+		};
+		
+		window.movePreview = function(event) {
+			const popup = document.getElementById('previewPopup');
+			if (!popup || popup.style.display === 'none') return;
+			
+			let x = event.clientX + 20;
+			let y = event.clientY - 100;
+			
+			// Keep within viewport
+			const viewportWidth = window.innerWidth;
+			const viewportHeight = window.innerHeight;
+			
+			// If would go off right edge, show on left side of cursor
+			if (x + 520 > viewportWidth) {
+				x = event.clientX - 520;
+			}
+			
+			// If would go off bottom, adjust y
+			if (y + 620 > viewportHeight) {
+				y = viewportHeight - 630;
+			}
+			
+			// Don't go above viewport
+			if (y < 10) y = 10;
+			
+			popup.style.left = x + 'px';
+			popup.style.top = y + 'px';
+		};
 
     async function fetchFiles() {
         const dir = '{$encodedDir}'; 
@@ -849,7 +1114,7 @@ print <<<JS
             }
 
             docData = data;
-            renderFiles();
+            renderCurrentView();
         } catch (error) {
             document.getElementById(containerId).innerHTML = '<div style="color:red;">Error loading files</div>';
             console.error(error);
@@ -906,7 +1171,7 @@ print <<<JS
 							<span>&#9660;</span>
 						</div>
 					</th>
-					<th style="padding:8px; border:1px solid #ddd; text-align:center; width: 140px; color:${buttonTxtColor};">
+					<th style="padding:8px; border:1px solid #ddd; text-align:center; width: 90px; color:${buttonTxtColor};">
 						<span>Actions</span>
 					</th>
 				</tr>
@@ -916,7 +1181,9 @@ print <<<JS
 
 
 		let activeRows = '';
+		let perfectMatchRows = '';
 		let matchingAmountRows = '';
+		let dateMatchRows = '';
 		let combinationRows = '';
 		let otherRows = '';
 		
@@ -924,31 +1191,86 @@ print <<<JS
 		const normalizedTotal = parseFloat(totalSum?.replace(/\./g, '').replace(',', '.') || 0);
 		const hasAmountToMatch = normalizedTotal !== 0 && !isNaN(normalizedTotal);
 		
+		// Normalize target date for comparison (convert dd-mm-yyyy to yyyy-mm-dd for comparison)
+		let normalizedTargetDate = null;
+		if (targetDate) {
+			// Handle Danish date format (dd-mm-yyyy)
+			const dateParts = targetDate.split('-');
+			if (dateParts.length === 3) {
+				if (dateParts[0].length === 4) {
+					// Already yyyy-mm-dd format
+					normalizedTargetDate = targetDate;
+				} else {
+					// Convert dd-mm-yyyy to yyyy-mm-dd
+					normalizedTargetDate = dateParts[2] + '-' + dateParts[1] + '-' + dateParts[0];
+				}
+			}
+		}
+		const hasDateToMatch = normalizedTargetDate !== null;
+		
 		// First pass: count matching documents and find combinations
 		let matchingCount = 0;
-		let exactMatches = []; // Store filenames that are exact matches
+		let exactMatches = []; // Store filenames that are exact amount matches
+		let perfectMatches = []; // Store filenames that match BOTH amount AND date
+		let dateOnlyMatches = []; // Store filenames that match date but not amount
 		let combinationMatches = new Set(); // Store filenames that are part of a combination
 		let combinationGroups = []; // Store the actual combinations found
 		
-		if (hasAmountToMatch) {
+		// Helper function to normalize date for comparison
+		const normalizeDate = function(dateStr) {
+			if (!dateStr) return null;
+			// Remove time portion if present
+			dateStr = dateStr.split(' ')[0];
+			const parts = dateStr.split('-');
+			if (parts.length === 3) {
+				if (parts[0].length === 4) {
+					// Already yyyy-mm-dd
+					return dateStr;
+				} else {
+					// dd-mm-yyyy to yyyy-mm-dd
+					return parts[2] + '-' + parts[1] + '-' + parts[0];
+				}
+			}
+			return null;
+		};
+		
+		if (hasAmountToMatch || hasDateToMatch) {
 			// Build list of documents with valid amounts
 			const docsWithAmounts = [];
 			for (let i = 0; i < docData.length; i++) {
 				const row = docData[i];
 				const normalizedAmount = parseFloat(row.amount);
+				const rowDate = normalizeDate(row.date);
+				const filename = row.filename || '';
+				
+				// Check date match
+				const isDateMatch = hasDateToMatch && rowDate === normalizedTargetDate;
+				
+				// Check amount match
+				const isAmountMatch = hasAmountToMatch && !isNaN(normalizedAmount) && Math.abs(normalizedAmount - normalizedTotal) < 0.01;
+				
 				if (!isNaN(normalizedAmount) && normalizedAmount > 0) {
-					const filename = row.filename || '';
 					docsWithAmounts.push({
 						index: i,
 						filename: filename,
 						amount: normalizedAmount,
+						date: rowDate,
 						row: row
 					});
-					// Count exact matches and store filenames
-					if (Math.abs(normalizedAmount - normalizedTotal) < 0.01) {
-						matchingCount++;
-						exactMatches.push(filename);
-					}
+				}
+				
+				// Categorize matches
+				if (isAmountMatch && isDateMatch) {
+					// Perfect match - both amount AND date
+					perfectMatches.push(filename);
+					matchingCount++;
+				} else if (isAmountMatch) {
+					// Amount only match
+					exactMatches.push(filename);
+					matchingCount++;
+				} else if (isDateMatch) {
+					// Date only match
+					dateOnlyMatches.push(filename);
 				}
 			}
 			
@@ -1022,8 +1344,18 @@ print <<<JS
 		
 		// Store combination info for display
 		const hasCombinationMatches = combinationMatches.size > 0;
+		const hasPerfectMatches = perfectMatches.length > 0;
+		const hasDateOnlyMatches = dateOnlyMatches.length > 0;
 
 		for (const row of docData) {
+			// Apply search filter
+			if (searchFilter) {
+				const searchText = ((row.filename || '') + ' ' + (row.subject || '') + ' ' + (row.account || '') + ' ' + (row.amount || '') + ' ' + (row.date || '')).toLowerCase();
+				if (searchText.indexOf(searchFilter) === -1) {
+					continue;
+				}
+			}
+						
 			const dateFormatted = escapeHTML(row.date.split(' ')[0]);
 
 			// Use filename directly from row data - more reliable than parsing from href
@@ -1072,16 +1404,29 @@ print <<<JS
 			const normalizedAmount = parseFloat(row.amount);
 			const isAmountMatch = hasAmountToMatch && !isNaN(normalizedAmount) && Math.abs(normalizedAmount - normalizedTotal) < 0.01;
 			
+			// Check if this row's date matches the target date
+			const rowDate = normalizeDate(row.date);
+			const isDateMatch = hasDateToMatch && rowDate === normalizedTargetDate;
+			
+			// Check for perfect match (both amount AND date)
+			const isPerfectMatch = isAmountMatch && isDateMatch;
+			
 			// Check if this row is part of a combination match
 			const isCombinationMatch = hasCombinationMatches && combinationMatches.has(poolFileFromHref);
 
-			// Determine row style based on selection and amount match
+			// Determine row style based on selection and match type
 			let rowStyle = "border-bottom:1px solid #ddd;";
 			if (isMatch) {
 				rowStyle = `border-bottom:1px solid #ddd; background-color:${lightButtonColor} !important; color:#000000 !important; font-weight:bold;`;
+			} else if (isPerfectMatch) {
+				// Blue/purple background for perfect match (amount + date)
+				rowStyle = "border-bottom:1px solid #ddd; background-color:#cce5ff !important; border-left: 4px solid #004085 !important;";
 			} else if (isAmountMatch) {
 				// Green-tinted background for exact amount matches
 				rowStyle = "border-bottom:1px solid #ddd; background-color:#d4edda !important;";
+			} else if (isDateMatch && !isAmountMatch) {
+				// Light blue background for date-only matches
+				rowStyle = "border-bottom:1px solid #ddd; background-color:#e7f3ff !important;";
 			} else if (isCombinationMatch) {
 				// Amber/orange-tinted background for combination matches
 				rowStyle = "border-bottom:1px solid #ddd; background-color:#fff3cd !important;";
@@ -1089,32 +1434,45 @@ print <<<JS
 
 			// Format amount with match indicator
 			let amountDisplay = escapeHTML(row.amount);
-			if (isAmountMatch) {
-				amountDisplay = "<span style='color: #155724; font-weight: bold;'><i class='fa fa-check-circle' style='margin-right: 4px; color: #28a745;'></i>" + escapeHTML(row.amount) + "</span>";
+			if (isPerfectMatch) {
+				amountDisplay = "<span style='color: #004085; font-weight: bold;'><span style='margin-right: 4px; color: #007bff;'>" + svgIcons.star + "</span>" + escapeHTML(row.amount) + "</span>";
+			} else if (isAmountMatch) {
+				amountDisplay = "<span style='color: #155724; font-weight: bold;'><span style='margin-right: 4px; color: #28a745;'>" + svgIcons.check + "</span>" + escapeHTML(row.amount) + "</span>";
 			} else if (isCombinationMatch) {
-				amountDisplay = "<span style='color: #856404; font-weight: bold;'><i class='fa fa-plus-circle' style='margin-right: 4px; color: #ffc107;'></i>" + escapeHTML(row.amount) + "</span>";
+				amountDisplay = "<span style='color: #856404; font-weight: bold;'><span style='margin-right: 4px; color: #ffc107;'>" + svgIcons.plus + "</span>" + escapeHTML(row.amount) + "</span>";
+			}
+			
+			// Format date with match indicator
+			let dateDisplay = dateFormatted;
+			if (isDateMatch) {
+				dateDisplay = "<span style='color: #004085; font-weight: bold;'><span style='margin-right: 4px; color: #007bff;'>" + svgIcons.calendar + "</span>" + dateFormatted + "</span>";
 			}
 
 			// All cells start as non-editable (text)
 			const subjectCell = "<span class='cell-content'>" + escapeHTML(row.subject) + "</span>";
 			const accountCell = "<span class='cell-content'>" + escapeHTML(row.account) + "</span>";
 			const amountCell = "<span class='cell-content'>" + amountDisplay + "</span>";
-			const dateCell = "<span class='cell-content'>" + dateFormatted + "</span>";
+			const dateCell = "<span class='cell-content'>" + dateDisplay + "</span>";
 
 			// poolFileFromHref already set above
 			const deleteUrl = row.href.replace(/poolFile=[^&]*/, '') + (row.href.includes('?') ? '&' : '?') + 'unlink=1&unlinkFile=' + encodeURIComponent(poolFileFromHref);
 			
 			const actionsCell = "<div style='display: flex; gap: 4px; justify-content: center; align-items: center; flex-wrap: wrap;'>" +
-				"<button type='button' onclick='event.preventDefault(); event.stopPropagation(); enableRowEdit(this, \"" + escapeHTML(poolFileFromHref) + "\", \"" + escapeHTML(row.subject) + "\", \"" + escapeHTML(row.account) + "\", \"" + escapeHTML(row.amount) + "\", \"" + dateFormatted + "\"); return false;' style='padding: 4px 8px; background-color: " + buttonColor + "; color: " + buttonTxtColor + "; border: 1px solid " + buttonColor + "; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; transition: all 0.2s;' onmouseover='this.style.opacity=\"0.9\"; this.style.transform=\"scale(1.05)\"' onmouseout='this.style.opacity=\"1\"; this.style.transform=\"scale(1)\"' title='Rediger'><i class='fa fa-pencil' style='font-size: 12px;'></i></button>" +
-				"<button type='button' onclick='event.preventDefault(); event.stopPropagation(); deletePoolFile(\"" + escapeHTML(poolFileFromHref) + "\", " + JSON.stringify(row.subject) + ", \"" + deleteUrl + "\"); return false;' style='padding: 4px 8px; background-color: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; transition: all 0.2s;' onmouseover='this.style.backgroundColor=\"#c82333\"; this.style.transform=\"scale(1.05)\"' onmouseout='this.style.backgroundColor=\"#dc3545\"; this.style.transform=\"scale(1)\"' title='Slet'><i class='fa fa-trash-o' style='font-size: 12px;'></i></button>" +
+				"<button type='button' onclick='event.preventDefault(); event.stopPropagation(); enableRowEdit(this, \"" + escapeHTML(poolFileFromHref) + "\", \"" + escapeHTML(row.subject) + "\", \"" + escapeHTML(row.account) + "\", \"" + escapeHTML(row.amount) + "\", \"" + dateFormatted + "\"); return false;' style='padding: 4px 8px; background-color: " + buttonColor + "; color: " + buttonTxtColor + "; border: 1px solid " + buttonColor + "; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; transition: all 0.2s;' onmouseover='this.style.opacity=\"0.9\"; this.style.transform=\"scale(1.05)\"' onmouseout='this.style.opacity=\"1\"; this.style.transform=\"scale(1)\"' title='Rediger'>" + svgIcons.pencil + "</button>" +
+				"<button type='button' onclick='event.preventDefault(); event.stopPropagation(); deletePoolFile(\"" + escapeHTML(poolFileFromHref) + "\", " + JSON.stringify(row.subject) + ", \"" + deleteUrl + "\"); return false;' style='padding: 4px 8px; background-color: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; transition: all 0.2s;' onmouseover='this.style.backgroundColor=\"#c82333\"; this.style.transform=\"scale(1.05)\"' onmouseout='this.style.backgroundColor=\"#dc3545\"; this.style.transform=\"scale(1)\"' title='Slet'>" + svgIcons.trash + "</button>" +
 				"</div>";
 
 			// Check if this checkbox should be checked (restore from sessionStorage)
 			const savedChecked = sessionStorage.getItem('docPool_checked_' + poolFileFromHref) === 'true';
 			const checkedAttr = savedChecked ? ' checked' : '';
 			
-			const dataAttrs = "data-pool-file='" + escapeHTML(poolFileFromHref) + "' " + (isMatch ? "data-selected='true' " : "") + (isAmountMatch ? "data-amount-match='true' " : "") + (isCombinationMatch ? "data-combination-match='true' " : "");
-			const rowHTML = "<tr " + dataAttrs + "style='" + rowStyle + " cursor: pointer;' onclick=\"if(!event.target.closest('button') && !event.target.closest('input')) { saveCheckboxState(); window.location.href='" + row.href + "'; }\">" +
+			const dataAttrs = "data-pool-file='" + escapeHTML(poolFileFromHref) + "' " + 
+				(isMatch ? "data-selected='true' " : "") + 
+				(isPerfectMatch ? "data-perfect-match='true' " : "") +
+				(isAmountMatch && !isPerfectMatch ? "data-amount-match='true' " : "") + 
+				(isDateMatch && !isAmountMatch ? "data-date-match='true' " : "") +
+				(isCombinationMatch ? "data-combination-match='true' " : "");
+				const rowHTML = "<tr " + dataAttrs + "style='" + rowStyle + " cursor: pointer;' onclick=\"if(!event.target.closest('button') && !event.target.closest('input') && !this.hasAttribute('data-editing')) { saveCheckboxState(); window.location.href='" + row.href + "'; }\">" +
 				"<td style='padding:6px; border:1px solid #ddd; text-align:center; width: 40px;' onclick='event.stopPropagation();'><input type='checkbox' class='file-checkbox' value='" + escapeHTML(poolFileFromHref) + "'" + checkedAttr + " onchange='saveCheckboxState(); updateBulkButton();' onclick='event.stopPropagation();' style='cursor: pointer; width: 18px; height: 18px;'></td>" +
 				"<td style='padding:6px; border:1px solid #ddd; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;' title='" + escapeHTML(row.subject) + "'>" + subjectCell + "</td>" +
 				"<td style='padding:6px; border:1px solid #ddd; max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;' title='" + escapeHTML(row.account) + "'>" + accountCell + "</td>" +
@@ -1122,10 +1480,16 @@ print <<<JS
 				"<td style='padding:6px; border:1px solid #ddd; max-width: 100px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;' title='" + escapeHTML(row.date) + "'>" + dateCell + "</td>" +
 				"<td style='padding:4px; border:1px solid #ddd; text-align: center; width: 140px;' onclick='event.stopPropagation();'>" + actionsCell + "</td>" +
 				"</tr>";
+			
+			// Categorize rows by match type (priority order)
 			if (isMatch) {
 				activeRows += rowHTML;
+			} else if (isPerfectMatch) {
+				perfectMatchRows += rowHTML;
 			} else if (isAmountMatch) {
 				matchingAmountRows += rowHTML;
+			} else if (isDateMatch) {
+				dateMatchRows += rowHTML;
 			} else if (isCombinationMatch) {
 				combinationRows += rowHTML;
 			} else {
@@ -1133,15 +1497,39 @@ print <<<JS
 			}
 		}
 
-		// Add section header for exact matching amounts
+		// Add section header for perfect matches (amount + date)
+		let perfectMatchHeader = '';
+		if (hasPerfectMatches && perfectMatchRows) {
+			const perfectFilesJson = JSON.stringify(perfectMatches).replace(/'/g, "&#39;");
+			perfectMatchHeader = "<tr style='background-color: #007bff; color: white; cursor: pointer;' onclick='selectCombinationFiles(" + perfectFilesJson + ")' title='Klik for at vælge alle bilag med perfekt match'>" +
+				"<td colspan='6' style='padding: 8px 12px; font-weight: bold; font-size: 12px; border: 1px solid #007bff;'>" +
+				"<span style='margin-right: 6px;'>" + svgIcons.star + "</span>" +
+				"Perfekt match (beløb: " + escapeHTML(totalSum) + " + dato: " + escapeHTML(targetDate) + ") - " + perfectMatches.length + " fundet" +
+				" <span style='font-weight: normal; font-size: 11px; float: right;'>" + svgIcons.pointer + " Klik for at vælge</span>" +
+				"</td></tr>";
+		}
+		
+		// Add section header for exact matching amounts (without date match)
 		let matchingHeader = '';
-		if (hasAmountToMatch && matchingCount > 0 && matchingAmountRows) {
+		if (hasAmountToMatch && exactMatches.length > 0 && matchingAmountRows) {
 			const exactFilesJson = JSON.stringify(exactMatches).replace(/'/g, "&#39;");
-			matchingHeader = "<tr style='background-color: #28a745; color: white; cursor: pointer;' onclick='selectCombinationFiles(" + exactFilesJson + ")' title='Klik for at vælge alle bilag med eksakt match'>" +
+			matchingHeader = "<tr style='background-color: #28a745; color: white; cursor: pointer;' onclick='selectCombinationFiles(" + exactFilesJson + ")' title='Klik for at vælge alle bilag med beløb match'>" +
 				"<td colspan='6' style='padding: 8px 12px; font-weight: bold; font-size: 12px; border: 1px solid #28a745;'>" +
-				"<i class='fa fa-check-circle' style='margin-right: 6px;'></i>" +
-				"Eksakt match (beløb: " + escapeHTML(totalSum) + ") - " + matchingCount + " fundet" +
-				" <span style='font-weight: normal; font-size: 11px; float: right;'><i class='fa fa-hand-pointer-o'></i> Klik for at vælge</span>" +
+				"<span style='margin-right: 6px;'>" + svgIcons.check + "</span>" +
+				"Beløb match (beløb: " + escapeHTML(totalSum) + ") - " + exactMatches.length + " fundet" +
+				" <span style='font-weight: normal; font-size: 11px; float: right;'>" + svgIcons.pointer + " Klik for at vælge</span>" +
+				"</td></tr>";
+		}
+		
+		// Add section header for date-only matches
+		let dateMatchHeader = '';
+		if (hasDateOnlyMatches && dateMatchRows) {
+			const dateFilesJson = JSON.stringify(dateOnlyMatches).replace(/'/g, "&#39;");
+			dateMatchHeader = "<tr style='background-color: #17a2b8; color: white; cursor: pointer;' onclick='selectCombinationFiles(" + dateFilesJson + ")' title='Klik for at vælge alle bilag med dato match'>" +
+				"<td colspan='6' style='padding: 8px 12px; font-weight: bold; font-size: 12px; border: 1px solid #17a2b8;'>" +
+				"<span style='margin-right: 6px;'>" + svgIcons.calendar + "</span>" +
+				"Dato match (" + escapeHTML(targetDate) + ") - " + dateOnlyMatches.length + " fundet" +
+				" <span style='font-weight: normal; font-size: 11px; float: right;'>" + svgIcons.pointer + " Klik for at vælge</span>" +
 				"</td></tr>";
 		}
 		
@@ -1160,15 +1548,15 @@ print <<<JS
 		
 		combinationHeader = "<tr style='background-color: #ffc107; color: #212529; cursor: pointer;' onclick='selectCombinationFiles(" + comboFilesJson + ")' title='Klik for at vælge alle bilag i denne kombination'>" +
 				"<td colspan='6' style='padding: 8px 12px; font-weight: bold; font-size: 12px; border: 1px solid #ffc107;'>" +
-				"<i class='fa fa-plus-circle' style='margin-right: 6px;'></i>" +
+				"<span style='margin-right: 6px;'>" + svgIcons.plus + "</span>" +
 				"Kombination fundet (" + combinationMatches.size + " bilag giver: " + escapeHTML(totalSum) + ")" +
 				(comboDesc ? " <span style='font-weight: normal; font-size: 11px;'>(" + comboDesc + ")</span>" : "") +
-				" <span style='font-weight: normal; font-size: 11px; float: right;'><i class='fa fa-hand-pointer-o'></i> Klik for at vælge</span>" +
+				" <span style='font-weight: normal; font-size: 11px; float: right;'>" + svgIcons.pointer + " Klik for at vælge</span>" +
 				"</td></tr>";
 		}
 
-		// Ensure active rows come first, then exact matches, then combination matches, then others
-		html += activeRows + matchingHeader + matchingAmountRows + combinationHeader + combinationRows + otherRows;
+		// Ensure rows are ordered by priority: active, perfect match, amount match, date match, combination, others
+		html += activeRows + perfectMatchHeader + perfectMatchRows + matchingHeader + matchingAmountRows + dateMatchHeader + dateMatchRows + combinationHeader + combinationRows + otherRows;
 
 			html += "</tbody></table>";
 			
@@ -1187,9 +1575,15 @@ print <<<JS
 				table tbody tr[data-selected='true']:hover { background-color: " + lightButtonColor + " !important; }\
 				table tbody tr[data-selected='true']:hover td { color: #000000 !important; }\
 				table tbody tr[data-editing='true'] { background-color: " + lightButtonColor + " !important; }\
+				table tbody tr[data-perfect-match='true'] { background-color: #cce5ff !important; border-left: 4px solid #004085 !important; }\
+				table tbody tr[data-perfect-match='true']:hover { background-color: #b8daff !important; }\
+				table tbody tr[data-perfect-match='true'] td { color: #004085 !important; }\
 				table tbody tr[data-amount-match='true'] { background-color: #d4edda !important; }\
 				table tbody tr[data-amount-match='true']:hover { background-color: #c3e6cb !important; }\
 				table tbody tr[data-amount-match='true'] td { color: #155724 !important; }\
+				table tbody tr[data-date-match='true'] { background-color: #e7f3ff !important; }\
+				table tbody tr[data-date-match='true']:hover { background-color: #d1e7ff !important; }\
+				table tbody tr[data-date-match='true'] td { color: #0c5460 !important; }\
 				table tbody tr[data-combination-match='true'] { background-color: #fff3cd !important; }\
 				table tbody tr[data-combination-match='true']:hover { background-color: #ffe69c !important; }\
 				table tbody tr[data-combination-match='true'] td { color: #856404 !important; }\
@@ -1227,6 +1621,368 @@ print <<<JS
 			}
 		}
 
+		// Card layout render function (similar to linkBilag style)
+		function renderFilesCard() {
+			if (!docData.length) {
+				document.getElementById(containerId).innerHTML = '<em>No files found.</em>';
+				return;
+			}
+			
+			// Get current poolFile from URL for highlighting
+			const currentUrlParams = new URLSearchParams(window.location.search);
+			const allCurrentPoolFiles = currentUrlParams.getAll('poolFile');
+			let currentPoolFile = null;
+			for (let i = allCurrentPoolFiles.length - 1; i >= 0; i--) {
+				if (allCurrentPoolFiles[i] && allCurrentPoolFiles[i].trim() !== '') {
+					currentPoolFile = allCurrentPoolFiles[i];
+					break;
+				}
+			}
+			
+			// Amount and date matching logic (reuse from renderFiles)
+			const normalizedTotal = parseFloat(totalSum?.replace(/\\./g, '').replace(',', '.') || 0);
+			const hasAmountToMatch = normalizedTotal !== 0 && !isNaN(normalizedTotal);
+			
+			// Normalize target date for card view
+			let cardNormalizedTargetDate = null;
+			if (targetDate) {
+				const dateParts = targetDate.split('-');
+				if (dateParts.length === 3) {
+					if (dateParts[0].length === 4) {
+						cardNormalizedTargetDate = targetDate;
+					} else {
+						cardNormalizedTargetDate = dateParts[2] + '-' + dateParts[1] + '-' + dateParts[0];
+					}
+				}
+			}
+			const cardHasDateToMatch = cardNormalizedTargetDate !== null;
+			
+			let exactMatches = [];
+			let perfectMatches = [];
+			let dateOnlyMatches = [];
+			let combinationMatches = new Set();
+			let combinationGroups = [];
+			
+			if (hasAmountToMatch || cardHasDateToMatch) {
+				const docsWithAmounts = [];
+				for (let i = 0; i < docData.length; i++) {
+					const row = docData[i];
+					const normalizedAmount = parseFloat(row.amount);
+					const filename = row.filename || '';
+					
+					// Normalize row date
+					let rowDate = null;
+					if (row.date) {
+						const dateStr = row.date.split(' ')[0];
+						const parts = dateStr.split('-');
+						if (parts.length === 3) {
+							rowDate = parts[0].length === 4 ? dateStr : parts[2] + '-' + parts[1] + '-' + parts[0];
+						}
+					}
+					
+					const isDateMatch = cardHasDateToMatch && rowDate === cardNormalizedTargetDate;
+					const isAmountMatch = hasAmountToMatch && !isNaN(normalizedAmount) && Math.abs(normalizedAmount - normalizedTotal) < 0.01;
+					
+					if (!isNaN(normalizedAmount) && normalizedAmount > 0) {
+						docsWithAmounts.push({
+							index: i,
+							filename: filename,
+							amount: normalizedAmount,
+							row: row
+						});
+					}
+					
+					if (isAmountMatch && isDateMatch) {
+						perfectMatches.push(filename);
+					} else if (isAmountMatch) {
+						exactMatches.push(filename);
+					} else if (isDateMatch) {
+						dateOnlyMatches.push(filename);
+					}
+				}
+				
+				// Find combinations if no exact or perfect matches
+				if (exactMatches.length === 0 && perfectMatches.length === 0 && docsWithAmounts.length >= 2) {
+					for (let i = 0; i < docsWithAmounts.length; i++) {
+						for (let j = i + 1; j < docsWithAmounts.length; j++) {
+							const sum = docsWithAmounts[i].amount + docsWithAmounts[j].amount;
+							if (Math.abs(sum - normalizedTotal) < 0.01) {
+								combinationMatches.add(docsWithAmounts[i].filename);
+								combinationMatches.add(docsWithAmounts[j].filename);
+								combinationGroups.push({
+									files: [docsWithAmounts[i].filename, docsWithAmounts[j].filename],
+									sum: sum
+								});
+							}
+						}
+					}
+				}
+			}
+			
+			let html = '<div class="doc-card-list" style="display: flex; flex-direction: column; gap: 8px; padding: 0 4px 80px 4px;">';
+			
+			// Add select all and bulk area
+			html += '<div style="display: flex; justify-content: space-between; align-items: center; padding: 8px; background: ' + buttonColor + '; border-radius: 6px; margin-bottom: 4px;">';
+			html += '<label style="display: flex; align-items: center; gap: 8px; color: ' + buttonTxtColor + '; font-size: 13px; cursor: pointer;">';
+			html += '<input type="checkbox" id="selectAllCheckboxCard" onclick="toggleSelectAll(this)" style="width: 18px; height: 18px; cursor: pointer;">';
+			html += '<span>Vælg alle</span>';
+			html += '</label>';
+			html += '<span style="color: ' + buttonTxtColor + '; font-size: 12px;">' + docData.length + ' filer</span>';
+			html += '</div>';
+			
+			// Perfect match header (amount + date) if applicable
+			if (perfectMatches.length > 0) {
+				const perfectFilesJson = JSON.stringify(perfectMatches).replace(/'/g, "&#39;");
+				html += '<div onclick="selectCombinationFiles(' + perfectFilesJson + ')" style="cursor: pointer; padding: 10px; background: #007bff; color: white; border-radius: 6px; margin-bottom: 8px;">';
+				html += '<span style="margin-right: 6px;">' + svgIcons.star + '</span>';
+				html += '<strong>Perfekt match</strong> - ' + perfectMatches.length + ' bilag matcher beløb ' + escapeHTML(totalSum) + ' og dato ' + escapeHTML(targetDate);
+				html += ' <span style="float: right; font-size: 11px;">' + svgIcons.pointer + ' Klik for at vælge</span>';
+				html += '</div>';
+			}
+			
+			// Amount-only match header if applicable
+			if (hasAmountToMatch && exactMatches.length > 0) {
+				const exactFilesJson = JSON.stringify(exactMatches).replace(/'/g, "&#39;");
+				html += '<div onclick="selectCombinationFiles(' + exactFilesJson + ')" style="cursor: pointer; padding: 10px; background: #28a745; color: white; border-radius: 6px; margin-bottom: 8px;">';
+				html += '<span style="margin-right: 6px;">' + svgIcons.check + '</span>';
+				html += '<strong>Beløb match</strong> - ' + exactMatches.length + ' bilag matcher beløbet ' + escapeHTML(totalSum);
+				html += ' <span style="float: right; font-size: 11px;">' + svgIcons.pointer + ' Klik for at vælge</span>';
+				html += '</div>';
+			}
+			
+			// Date-only match header if applicable
+			if (dateOnlyMatches.length > 0) {
+				const dateFilesJson = JSON.stringify(dateOnlyMatches).replace(/'/g, "&#39;");
+				html += '<div onclick="selectCombinationFiles(' + dateFilesJson + ')" style="cursor: pointer; padding: 10px; background: #17a2b8; color: white; border-radius: 6px; margin-bottom: 8px;">';
+				html += '<span style="margin-right: 6px;">' + svgIcons.calendar + '</span>';
+				html += '<strong>Dato match</strong> - ' + dateOnlyMatches.length + ' bilag matcher datoen ' + escapeHTML(targetDate);
+				html += ' <span style="float: right; font-size: 11px;">' + svgIcons.pointer + ' Klik for at vælge</span>';
+				html += '</div>';
+			}
+			
+			// Combination match header if applicable
+			if (combinationMatches.size > 0 && combinationGroups.length > 0) {
+				const comboFilesJson = JSON.stringify(combinationGroups[0].files).replace(/'/g, "&#39;");
+				html += '<div onclick="selectCombinationFiles(' + comboFilesJson + ')" style="cursor: pointer; padding: 10px; background: #ffc107; color: #212529; border-radius: 6px; margin-bottom: 8px;">';
+				html += '<span style="margin-right: 6px;">' + svgIcons.plus + '</span>';
+				html += '<strong>Kombination fundet</strong> - ' + combinationMatches.size + ' bilag giver tilsammen ' + escapeHTML(totalSum);
+				html += ' <span style="float: right; font-size: 11px;">' + svgIcons.pointer + ' Klik for at vælge</span>';
+				html += '</div>';
+			}
+			
+			// Render each file as a card
+			for (const row of docData) {
+				const filename = row.filename || '';
+				const subject = row.subject || filename;
+				const account = row.account || '';
+				const amount = row.amount || '';
+				const dateFormatted = (row.date || '').split(' ')[0];
+				
+				// Apply search filter
+				if (searchFilter) {
+					const searchText = (filename + ' ' + subject + ' ' + account + ' ' + amount).toLowerCase();
+					if (searchText.indexOf(searchFilter) === -1) {
+						continue;
+					}
+				}
+				
+				// Build file path for preview
+				const filePath = docFolder + '/' + db + '/pulje/' + filename;
+				
+				// Check matches
+				const isSelected = currentPoolFile && filename === currentPoolFile;
+				const isPerfectMatch = perfectMatches.includes(filename);
+				const isAmountMatch = exactMatches.includes(filename);
+				const isDateMatch = dateOnlyMatches.includes(filename);
+				const isCombinationMatch = combinationMatches.has(filename);
+				
+				// Card styling based on state (priority order)
+				let cardStyle = 'display: flex; align-items: flex-start; gap: 12px; padding: 12px; background: #fff; border: 1px solid #ddd; border-radius: 8px; cursor: pointer; transition: all 0.2s;';
+				if (isSelected) {
+					cardStyle += ' background: ' + lightButtonColor + '; border-color: ' + buttonColor + ';';
+				} else if (isPerfectMatch) {
+					cardStyle += ' background: #cce5ff; border-color: #007bff; border-left: 4px solid #004085;';
+				} else if (isAmountMatch) {
+					cardStyle += ' background: #d4edda; border-color: #28a745;';
+				} else if (isDateMatch) {
+					cardStyle += ' background: #e7f3ff; border-color: #17a2b8;';
+				} else if (isCombinationMatch) {
+					cardStyle += ' background: #fff3cd; border-color: #ffc107;';
+				}
+				
+				// Check if checkbox was previously checked
+				const savedChecked = sessionStorage.getItem('docPool_checked_' + filename) === 'true';
+				const checkedAttr = savedChecked ? ' checked' : '';
+				
+				// Delete URL
+				const deleteUrl = row.href.replace(/poolFile=[^&]*/, '') + (row.href.includes('?') ? '&' : '?') + 'unlink=1&unlinkFile=' + encodeURIComponent(filename);
+				
+				html += '<div class="doc-card-item" data-pool-file="' + escapeHTML(filename) + '" data-filepath="' + escapeHTML(filePath) + '" data-filename="' + escapeHTML(filename) + '" style="' + cardStyle + '" onmouseenter="showPreview(this, event)" onmouseleave="hidePreview()" onmousemove="movePreview(event)" onclick="if(!event.target.closest(\\'button\\') && !event.target.closest(\\'input\\') && !event.target.closest(\\'.card-actions\\')) { toggleCardCheckbox(this); }">';
+				
+				// Checkbox
+				html += '<div style="flex-shrink: 0;" onclick="event.stopPropagation();">';
+				html += '<input type="checkbox" class="file-checkbox" value="' + escapeHTML(filename) + '"' + checkedAttr + ' onchange="saveCheckboxState(); updateBulkButton();" onclick="event.stopPropagation();" style="width: 20px; height: 20px; cursor: pointer;">';
+				html += '</div>';
+				
+				// Icon
+				html += '<div style="flex-shrink: 0; color: ' + buttonColor + ';">';
+				html += '<svg class="icon-svg" style="width: 32px; height: 32px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>';
+				html += '</div>';
+				
+				// Content
+				html += '<div style="flex: 1; min-width: 0;">';
+				html += '<div style="font-weight: bold; font-size: 14px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="' + escapeHTML(subject) + '">' + escapeHTML(subject) + '</div>';
+				html += '<div style="font-size: 12px; color: #666; display: flex; flex-wrap: wrap; gap: 8px;">';
+				if (account) html += '<span><strong>Konto:</strong> ' + escapeHTML(account) + '</span>';
+				if (amount) {
+					let amountHtml = '<span><strong>Beløb:</strong> ';
+					if (isPerfectMatch) {
+						amountHtml += '<span style="color: #007bff;">' + svgIcons.star + ' ' + escapeHTML(amount) + '</span>';
+					} else if (isAmountMatch) {
+						amountHtml += '<span style="color: #28a745;">' + svgIcons.check + ' ' + escapeHTML(amount) + '</span>';
+					} else if (isCombinationMatch) {
+						amountHtml += '<span style="color: #ffc107;">' + svgIcons.plus + ' ' + escapeHTML(amount) + '</span>';
+					} else {
+						amountHtml += escapeHTML(amount);
+					}
+					amountHtml += '</span>';
+					html += amountHtml;
+				}
+				if (dateFormatted) {
+					let dateHtml = '<span><strong>Dato:</strong> ';
+					if (isPerfectMatch || isDateMatch) {
+						dateHtml += '<span style="color: #007bff;">' + svgIcons.calendar + ' ' + escapeHTML(dateFormatted) + '</span>';
+					} else {
+						dateHtml += escapeHTML(dateFormatted);
+					}
+					dateHtml += '</span>';
+					html += dateHtml;
+				}
+				html += '</div>';
+				html += '</div>';
+				
+				// Actions
+				html += '<div class="card-actions" style="flex-shrink: 0; display: flex; gap: 4px;" onclick="event.stopPropagation();">';
+				html += '<button type="button" onclick="event.preventDefault(); event.stopPropagation(); enableCardEdit(\\'' + escapeHTML(filename) + '\\', \\'' + escapeHTML(subject) + '\\', \\'' + escapeHTML(account) + '\\', \\'' + escapeHTML(amount) + '\\', \\'' + escapeHTML(dateFormatted) + '\\'); return false;" style="padding: 6px 10px; background: ' + buttonColor + '; color: ' + buttonTxtColor + '; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;" title="Rediger">' + svgIcons.pencil + '</button>';
+				html += '<button type="button" onclick="event.preventDefault(); event.stopPropagation(); deletePoolFile(\\'' + escapeHTML(filename) + '\\', ' + JSON.stringify(subject) + ', \\'' + escapeHTML(deleteUrl) + '\\'); return false;" style="padding: 6px 10px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;" title="Slet">' + svgIcons.trash + '</button>';
+				html += '</div>';
+				
+				html += '</div>';
+			}
+			
+			html += '</div>';
+			
+			// Bulk actions
+			html += '<div id="bulkActionsContainer" style="margin-top: 12px; padding: 8px; background-color: ' + lightButtonColor + '; border-radius: 6px; display: none; position: sticky; bottom: 0; z-index: 5;">';
+			html += '<button type="button" id="bulkInsertButton" onclick="chooseMultipleBilag()" style="padding: 8px 16px; background-color: ' + buttonColor + '; color: ' + buttonTxtColor + '; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold;">';
+			html += 'Indsæt valgte (<span id="selectedCount">0</span>)';
+			html += '</button>';
+			html += '</div>';
+			
+			// Dynamic styles for cards
+			html += '<style>';
+			html += '.doc-card-item:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.15); transform: translateY(-1px); }';
+			html += '</style>';
+			
+			document.getElementById(containerId).innerHTML = html;
+			
+			// Restore checkboxes and update UI
+			const checkboxes = document.querySelectorAll('.file-checkbox');
+			checkboxes.forEach(cb => {
+				const saved = sessionStorage.getItem('docPool_checked_' + cb.value) === 'true';
+				if (saved) cb.checked = true;
+			});
+			
+			const selectAllCheckbox = document.getElementById('selectAllCheckboxCard');
+			if (selectAllCheckbox && checkboxes.length > 0) {
+				const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+				selectAllCheckbox.checked = allChecked;
+			}
+			
+			if (typeof updateBulkButton === 'function') updateBulkButton();
+			if (typeof updateFixedDiv === 'function') setTimeout(updateFixedDiv, 100);
+		}
+		
+		
+		// Toggle checkbox when clicking a card in card view (kortvisning)
+		window.toggleCardCheckbox = function(cardElement) {
+			const checkbox = cardElement.querySelector('.file-checkbox');
+			if (checkbox) {
+				checkbox.checked = !checkbox.checked;
+				saveCheckboxState();
+				updateBulkButton();
+				
+				// Update card styling based on checkbox state
+				const filename = cardElement.dataset.poolFile;
+				if (checkbox.checked) {
+					cardElement.style.background = lightButtonColor;
+					cardElement.style.borderColor = buttonColor;
+				} else {
+					// Reset to default or match state
+					cardElement.style.background = '#fff';
+					cardElement.style.borderColor = '#ddd';
+				}
+			}
+		};
+		
+		// Enable editing for a card item - opens a modal/inline form
+		window.enableCardEdit = function(poolFile, subject, account, amount, date) {
+			// For simplicity, reuse the table row edit via renderFiles mode temporarily
+			// Switch to table mode, enable edit, then user can save and switch back
+			// Or we can show a simple prompt/modal
+			
+			const newSubject = prompt('Emne:', subject);
+			if (newSubject === null) return; // Cancelled
+			
+			const newAccount = prompt('Konto:', account);
+			if (newAccount === null) return;
+			
+			const newAmount = prompt('Beløb:', amount);
+			if (newAmount === null) return;
+			
+			const newDate = prompt('Dato (ÅÅÅÅ-MM-DD):', date);
+			if (newDate === null) return;
+			
+			// Save via AJAX (reuse existing save logic)
+			const form = document.forms['gennemse'];
+			if (!form) return;
+			
+			const formAction = form.getAttribute('action');
+			const url = new URL(formAction, window.location.href);
+			url.searchParams.set('poolFile', poolFile);
+			
+			const formData = new FormData();
+			formData.append('rename', 'Ret filnavn');
+			formData.append('poolFile', poolFile);
+			formData.append('newFileName', poolFile);
+			formData.append('newSubject', newSubject);
+			formData.append('newAccount', newAccount);
+			formData.append('newAmount', newAmount);
+			formData.append('newDate', newDate);
+			
+			url.searchParams.forEach((value, key) => {
+				formData.append(key, value);
+			});
+			
+			fetch(url.toString(), {
+				method: 'POST',
+				body: formData,
+				redirect: 'follow'
+			})
+			.then(response => {
+				if (response.ok) {
+					// Refresh the file list
+					fetchFiles();
+				} else {
+					alert('Fejl ved gemning. Prøv igen.');
+				}
+			})
+			.catch(error => {
+				console.error('Error saving:', error);
+				alert('Fejl ved gemning: ' + error.message);
+			});
+		};
+
 
 	
 		function sortFiles(field) {
@@ -1252,7 +2008,7 @@ print <<<JS
 			});
 
 			currentSort = { field, asc };
-			renderFiles();
+			renderCurrentView();
 		}
 
 
@@ -1326,6 +2082,59 @@ print <<<JS
 			}
 			formData.append(key, value);
 		});
+		
+		// If sourceId is empty (0 or not set), transfer date and amount from the first selected file
+		const sourceId = url.searchParams.get('sourceId') || '';
+		console.log('sourceId from URL:', sourceId, 'Is empty:', !sourceId || sourceId === '0' || sourceId === '');
+		
+		if (!sourceId || sourceId === '0' || sourceId === '') {
+			// Look up data from the first selected file
+			const firstFile = selectedFiles[0];
+			console.log('Looking for file in docData:', firstFile);
+			console.log('docData has', docData.length, 'entries');
+			
+			// Try multiple ways to find the file data
+			let fileData = docData.find(d => d.filename === firstFile);
+			
+			// If not found, try with URL decoding
+			if (!fileData) {
+				try {
+					const decodedFirstFile = decodeURIComponent(firstFile);
+					fileData = docData.find(d => d.filename === decodedFirstFile);
+					if (fileData) console.log('Found via URL decoding');
+				} catch (e) {
+					console.log('URL decode failed:', e);
+				}
+			}
+			
+			// If still not found, try case-insensitive match
+			if (!fileData) {
+				const firstFileLower = firstFile.toLowerCase();
+				fileData = docData.find(d => d.filename && d.filename.toLowerCase() === firstFileLower);
+				if (fileData) console.log('Found via case-insensitive match');
+			}
+			
+			console.log('File data found:', fileData);
+			
+			if (fileData) {
+				// Transfer date if available
+				if (fileData.date) {
+					formData.append('newDate', fileData.date);
+					console.log('Transferring date from pool file:', fileData.date);
+				} else {
+					console.log('No date in fileData');
+				}
+				// Transfer amount if available
+				if (fileData.amount) {
+					formData.append('newAmount', fileData.amount);
+					console.log('Transferring amount from pool file:', fileData.amount);
+				} else {
+					console.log('No amount in fileData');
+				}
+			} else {
+				console.log('Could not find file in docData. Available filenames:', docData.map(d => d.filename));
+			}
+		}
 		
 		// Debug: log what we're sending
 		console.log('FormData poolFiles:', formData.get('poolFiles'));
@@ -1511,16 +2320,18 @@ window.enableRowEdit = function(button, poolFile, subject, account, amount, date
 	if (cells.length >= 6) {
 		const dateFormatted = date.split(' ')[0] || date;
 		
-		// cells[0] is checkbox, cells[1-4] are data columns, cells[5] is actions
-		cells[1].innerHTML = "<input type='text' class='edit-input' value='" + escapeHTML(subject) + "' data-field='subject' onkeydown='handleEnterKey(event, this)' onclick='event.stopPropagation();'>";
-		cells[2].innerHTML = "<input type='text' class='edit-input' value='" + escapeHTML(account) + "' data-field='account' onkeydown='handleEnterKey(event, this)' onclick='event.stopPropagation();'>";
-		cells[3].innerHTML = "<input type='text' class='edit-input' value='" + escapeHTML(amount) + "' data-field='amount' onkeydown='handleEnterKey(event, this)' onclick='event.stopPropagation();'>";
-		cells[4].innerHTML = "<input type='date' class='edit-input' value='" + dateFormatted + "' data-field='date' onkeydown='handleEnterKey(event, this)' onchange='saveRowData(this)' onclick='event.stopPropagation();'>";
+		// Add multiple event handlers to prevent row clicks during text selection
+		const stopPropagation = "event.stopPropagation();";
+		const inputEvents = "onclick='" + stopPropagation + "' onmousedown='" + stopPropagation + "' onmouseup='" + stopPropagation + "' onmousemove='" + stopPropagation + "'";
+		cells[1].innerHTML = "<input type='text' class='edit-input' value='" + escapeHTML(subject) + "' data-field='subject' onkeydown='handleEnterKey(event, this)' " + inputEvents + ">";
+		cells[2].innerHTML = "<input type='text' class='edit-input' value='" + escapeHTML(account) + "' data-field='account' onkeydown='handleEnterKey(event, this)' " + inputEvents + ">";
+		cells[3].innerHTML = "<input type='text' class='edit-input' value='" + escapeHTML(amount) + "' data-field='amount' onkeydown='handleEnterKey(event, this)' " + inputEvents + ">";
+		cells[4].innerHTML = "<input type='date' class='edit-input' value='" + dateFormatted + "' data-field='date' onkeydown='handleEnterKey(event, this)' onchange='saveRowData(this)' " + inputEvents + ">";
 		
 		// Update actions column with only save (green) and cancel (red) buttons when editing
 		cells[5].innerHTML = "<div style='display: flex; gap: 4px; justify-content: center; align-items: center; flex-wrap: wrap;'>" +
-			"<button type='button' onclick='event.preventDefault(); event.stopPropagation(); saveRowData(this); return false;' style='padding: 4px 8px; background-color: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; transition: all 0.2s;' onmouseover='this.style.backgroundColor=\"#218838\"; this.style.transform=\"scale(1.05)\"' onmouseout='this.style.backgroundColor=\"#28a745\"; this.style.transform=\"scale(1)\"' title='Gem'><i class='fa fa-save' style='font-size: 12px;'></i></button>" +
-			"<button type='button' onclick='event.preventDefault(); event.stopPropagation(); cancelRowEdit(this); return false;' style='padding: 4px 8px; background-color: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; transition: all 0.2s;' onmouseover='this.style.backgroundColor=\"#c82333\"; this.style.transform=\"scale(1.05)\"' onmouseout='this.style.backgroundColor=\"#dc3545\"; this.style.transform=\"scale(1)\"' title='Annuller'><i class='fa fa-times' style='font-size: 12px;'></i></button>" +
+			"<button type='button' onclick='event.preventDefault(); event.stopPropagation(); saveRowData(this); return false;' style='padding: 4px 8px; background-color: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; transition: all 0.2s;' onmouseover='this.style.backgroundColor=\"#218838\"; this.style.transform=\"scale(1.05)\"' onmouseout='this.style.backgroundColor=\"#28a745\"; this.style.transform=\"scale(1)\"' title='Gem'>" + svgIcons.save + "</button>" +
+			"<button type='button' onclick='event.preventDefault(); event.stopPropagation(); cancelRowEdit(this); return false;' style='padding: 4px 8px; background-color: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; transition: all 0.2s;' onmouseover='this.style.backgroundColor=\"#c82333\"; this.style.transform=\"scale(1.05)\"' onmouseout='this.style.backgroundColor=\"#dc3545\"; this.style.transform=\"scale(1)\"' title='Annuller'>" + svgIcons.x + "</button>" +
 			"</div>";
 		
 		// Focus on first input (subject)
@@ -1668,8 +2479,8 @@ window.saveRowData = function(input) {
 			const deleteUrl = currentUrl.replace(/poolFile=[^&]*/, '') + (currentUrl.includes('?') ? '&' : '?') + 'unlink=1&unlinkFile=' + encodeURIComponent(poolFileFromRow);
 			
 			const actionsCell = "<div style='display: flex; gap: 4px; justify-content: center; align-items: center; flex-wrap: wrap;'>" +
-				"<button type='button' onclick='event.preventDefault(); event.stopPropagation(); enableRowEdit(this, \"" + escapeHTML(poolFileFromRow) + "\", \"" + escapeHTML(data.newSubject) + "\", \"" + escapeHTML(data.newAccount) + "\", \"" + escapeHTML(data.newAmount) + "\", \"" + dateFormatted + "\"); return false;' style='padding: 4px 8px; background-color: " + buttonColor + "; color: " + buttonTxtColor + "; border: 1px solid " + buttonColor + "; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; transition: all 0.2s;' onmouseover='this.style.opacity=\"0.9\"; this.style.transform=\"scale(1.05)\"' onmouseout='this.style.opacity=\"1\"; this.style.transform=\"scale(1)\"' title='Rediger'><i class='fa fa-pencil' style='font-size: 12px;'></i></button>" +
-				"<button type='button' onclick='event.preventDefault(); event.stopPropagation(); deletePoolFile(\"" + escapeHTML(poolFileFromRow) + "\", " + JSON.stringify(data.newSubject) + ", \"" + deleteUrl + "\"); return false;' style='padding: 4px 8px; background-color: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; transition: all 0.2s;' onmouseover='this.style.backgroundColor=\"#c82333\"; this.style.transform=\"scale(1.05)\"' onmouseout='this.style.backgroundColor=\"#dc3545\"; this.style.transform=\"scale(1)\"' title='Slet'><i class='fa fa-trash-o' style='font-size: 12px;'></i></button>" +
+				"<button type='button' onclick='event.preventDefault(); event.stopPropagation(); enableRowEdit(this, \"" + escapeHTML(poolFileFromRow) + "\", \"" + escapeHTML(data.newSubject) + "\", \"" + escapeHTML(data.newAccount) + "\", \"" + escapeHTML(data.newAmount) + "\", \"" + dateFormatted + "\"); return false;' style='padding: 4px 8px; background-color: " + buttonColor + "; color: " + buttonTxtColor + "; border: 1px solid " + buttonColor + "; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; transition: all 0.2s;' onmouseover='this.style.opacity=\"0.9\"; this.style.transform=\"scale(1.05)\"' onmouseout='this.style.opacity=\"1\"; this.style.transform=\"scale(1)\"' title='Rediger'>" + svgIcons.pencil + "</button>" +
+				"<button type='button' onclick='event.preventDefault(); event.stopPropagation(); deletePoolFile(\"" + escapeHTML(poolFileFromRow) + "\", " + JSON.stringify(data.newSubject) + ", \"" + deleteUrl + "\"); return false;' style='padding: 4px 8px; background-color: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; transition: all 0.2s;' onmouseover='this.style.backgroundColor=\"#c82333\"; this.style.transform=\"scale(1.05)\"' onmouseout='this.style.backgroundColor=\"#dc3545\"; this.style.transform=\"scale(1)\"' title='Slet'>" + svgIcons.trash + "</button>" +
 				"</div>";
 			
 			row.querySelector('td:nth-child(6)').innerHTML = actionsCell;
@@ -1793,11 +2604,19 @@ JS;
 	
 	print "<div id='fixedBottom' style='position: relative; width: 100%; padding: 16px; box-sizing: border-box; z-index: 1000;'>";
 	
+	// Toggle header for upload section
+	print "<div id='uploadToggleHeader' onclick='toggleUploadSection()' style='display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background-color: $buttonColor; color: $buttonTxtColor; border-radius: 8px; cursor: pointer; margin-bottom: 10px; user-select: none;'>";
+	print "<span style='font-weight: 600; font-size: 13px;'><span style='margin-right: 6px;'>$svgUpload</span>".findtekst(1414, $sprog_id)."</span>";
+	print "<span id='uploadToggleIcon' style='transition: transform 0.3s;'>$svgChevronDown</span>";
+	print "</div>";
+	
+	// Collapsible upload content
+	print "<div id='uploadContent' style='overflow: hidden; transition: max-height 0.3s ease, opacity 0.3s ease;'>";
+	
 	// Upload form (independent form, not nested) - uses AJAX like drag and drop
 	print "<form id='fileUploadForm' enctype='multipart/form-data' action='documents.php?$uploadParams' method='POST' style='margin: 0; padding: 0;'>";
 	print "<input type='hidden' name='MAX_FILE_SIZE' value='100000000'>";
 	print "<input type='hidden' name='openPool' value='1'>";
-	print "<div style='margin-bottom: 10px; padding: 8px; background-color: $buttonColor; border-radius: 8px; font-weight: 600; font-size: 14px; color: $buttonTxtColor; text-shadow: 0 1px 2px rgba(0,0,0,0.1);'>".findtekst(1414, $sprog_id).":</div>";
 	print "<label for='fileUploadInput' style='display: block; width: 100%; margin-bottom: 12px; cursor: pointer;'>";
 	print "<input id='fileUploadInput' class='inputbox' name='uploadedFile' type='file' accept='.pdf,.jpg,.jpeg,.png' style='width: 100%; height: auto; min-height: 40px; padding: 8px; border: 2px solid #ddd; border-radius: 8px; font-size: 12px; box-sizing: border-box; overflow: visible; background-color: #ffffff; transition: all 0.3s ease; pointer-events: auto; position: relative; z-index: 10; cursor: pointer;'>";
 	print "</label>";
@@ -1836,7 +2655,7 @@ JS;
 				
 				// Show loading state
 				var originalBtnText = submitBtn.innerHTML;
-				submitBtn.innerHTML = '<i class=\"fa fa-spinner fa-spin\" style=\"margin-right: 6px;\"></i> Uploader og analyserer...';
+				submitBtn.innerHTML = '<svg class=\"icon-svg icon-spin\" style=\"margin-right: 6px;\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><line x1=\"12\" y1=\"2\" x2=\"12\" y2=\"6\"></line><line x1=\"12\" y1=\"18\" x2=\"12\" y2=\"22\"></line><line x1=\"4.93\" y1=\"4.93\" x2=\"7.76\" y2=\"7.76\"></line><line x1=\"16.24\" y1=\"16.24\" x2=\"19.07\" y2=\"19.07\"></line><line x1=\"2\" y1=\"12\" x2=\"6\" y2=\"12\"></line><line x1=\"18\" y1=\"12\" x2=\"22\" y2=\"12\"></line><line x1=\"4.93\" y1=\"19.07\" x2=\"7.76\" y2=\"16.24\"></line><line x1=\"16.24\" y1=\"7.76\" x2=\"19.07\" y2=\"4.93\"></line></svg> Uploader og analyserer...';
 				submitBtn.disabled = true;
 				submitBtn.style.opacity = '0.7';
 				fileInput.disabled = true;
@@ -1941,12 +2760,15 @@ JS;
 		$linkUrl = "../includes/documents.php?linkBilag=1&kladde_id=" . urlencode($kladde_id) . "&bilag=" . urlencode($bilag) . "&fokus=" . urlencode($fokus) . "&sourceId=" . urlencode($sourceId) . "&source=" . urlencode($source);
 		print "<div style='margin-top: 14px;'>";
 		print "<a href='$linkUrl' style='display: block; width: 100%; padding: 10px; background-color: #6c757d; color: white; text-decoration: none; border-radius: 8px; font-size: 12px; font-weight: 600; text-align: center; box-sizing: border-box; transition: all 0.2s;' onmouseover='this.style.backgroundColor=\"#5a6268\"' onmouseout='this.style.backgroundColor=\"#6c757d\"'>";
-		print "<i class='fa fa-link' style='margin-right: 4px;'></i> Link bilag fra anden linje";
+		print "<span style='margin-right: 4px;'>$svgLink</span> Link bilag fra anden linje";
 		print "</a>";
 		print "</div>";
 	}
+	
+	// Close uploadContent div
+	print "</div>"; // uploadContent
 
-	// Add JavaScript variables for drag and drop
+	// Add JavaScript variables for drag and drop and toggle function
 	print "<script>
 	var clipVariables = {
 		sourceId: " . (int)$sourceId . ",
@@ -1956,6 +2778,51 @@ JS;
 		source: '$source',
 		openPool: 1
 	};
+	
+	// Toggle upload section visibility
+	window.toggleUploadSection = function() {
+		const content = document.getElementById('uploadContent');
+		const icon = document.getElementById('uploadToggleIcon');
+		const isHidden = localStorage.getItem('docPoolUploadHidden') === 'true';
+		
+		if (isHidden) {
+			// Show
+			content.style.maxHeight = content.scrollHeight + 'px';
+			content.style.opacity = '1';
+			if (icon) icon.style.transform = 'rotate(0deg)';
+			localStorage.setItem('docPoolUploadHidden', 'false');
+			// After animation, set to auto for dynamic content
+			setTimeout(function() {
+				content.style.maxHeight = 'none';
+			}, 300);
+		} else {
+			// Hide
+			content.style.maxHeight = content.scrollHeight + 'px';
+			setTimeout(function() {
+				content.style.maxHeight = '0';
+			}, 10);
+			content.style.opacity = '0';
+			if (icon) icon.style.transform = 'rotate(-90deg)';
+			localStorage.setItem('docPoolUploadHidden', 'true');
+		}
+	};
+	
+	// Initialize upload section state on page load
+	document.addEventListener('DOMContentLoaded', function() {
+		const content = document.getElementById('uploadContent');
+		const icon = document.getElementById('uploadToggleIcon');
+		const isHidden = localStorage.getItem('docPoolUploadHidden') === 'true';
+		
+		if (isHidden && content && icon) {
+			content.style.maxHeight = '0';
+			content.style.opacity = '0';
+			icon.style.transform = 'rotate(-90deg)';
+		} else if (content) {
+			content.style.maxHeight = 'none';
+			content.style.opacity = '1';
+			if (icon) icon.style.transform = 'rotate(0deg)';
+		}
+	});
 	</script>";
 	
 	print "</div>"; // fixedBottom
@@ -2089,10 +2956,11 @@ JS;
 	if ($corrected == '1') {
 		print "<meta http-equiv=\"refresh\" content=\"0;URL=../includes/documents.php?$params&openPool=1&poolFile=$poolFile\">";
 	}
-		if ($poolFile) {
+			if ($poolFile) {
 		if ($google_docs) $src="http://docs.google.com/viewer?url=$fullName&embedded=true";
 		else $src=$tmp;
-		print "<iframe style=\"width:100%;height:100%;border:none;overflow:hidden;\" src=\"$fullName\" frameborder=\"0\">";
+		
+		print "<iframe style=\"width:100%;height:100%;border:none;overflow:hidden;\" src=\"$fullName#pagemode=none\" frameborder=\"0\">";
 		print "</iframe>";
 	}
 	print "</div>"; // documentViewer

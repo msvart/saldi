@@ -661,7 +661,7 @@
 661	Cpr-nr	Social Security No	Social Security No
 662	Bank	Bank	Bank
 663	Tiltrådt	Joined	Ble med
-664	Løn	Pay	Betale
+664	Løn	Pay	Lønn
 665	Løntillæg	Wage supplement	Lønnstillegg
 666	Postnr & by	ZIP code & city	Post kode & by
 667	E-mail/brug	Email / use	E-post / bruk
@@ -2771,45 +2771,45 @@
 2771	POS-muligheder	POS options	POS-muligheter
 2772	db / dg (ekskl. moms)	db / dg (excl. VAT)	db / dg (ekskl. MVA)
 2773	I dag	Today	I dag
-2774	
-2775	
-2776	
-2777	
-2778	
-2779	
-2780	
-2781	
-2782	
-2783	
-2784	
-2785	
-2786	
-2787	
-2788	
-2789	
-2790	
-2791	
-2792	
-2793	
-2794	
-2795	
-2796	
-2797	
-2798	
-2799	
-2800	
-2801	
-2802	
-2803	
-2804	
-2805	
-2806	
-2807	
-2808	
-2809	
-2810	
-2811	
-2812	
+2774	Sager	Projects	Prosjekter
+2775	Planlægning	Planning	Planlegging
+2776	Dagbog	Daily Log	Dagbok
+2777	Certificering	Certification	Sertifisering
+2778	Regnskab	Accounting	Regnskap
+2779	Medarbejdermappe	Employee folder	Medarbeidermappe
+2780	Du er logget ind som	You are logged in as	Du er logget inn som
+2781	Hjem	Home	Hjem
+2782	Satser	Rates	Satser
+2783	Stillads	Scaffolding	Stillas
+2784	Løn	Wages	Lønn
+2785	Lønindtastning	Wage Entry	Lønnregistrering
+2786	Lønafregning	Wage Settlement	Lønnoppgjør
+2787	Lønliste	Wage List	Lønnsliste
+2788	Udskriv skema	Print form	Skriv ut skjema
+2789	Løndato	Wage date	Lønnsdato
+2790	Overført	Transferred	Overført
+2791	Godk/Afv	Appr/Rej	Godk/Avv
+2792	Sag	Project	Prosjekt
+2793	Ansvarlig	Responsible	Ansvarlig
+2794	Medarb.	Empl.	Medarb.
+2795	Sum	Total	Sum
+2796	Slet sortering	Clear sorting	Slett sortering
+2797	Vælg antal viste linjer	Select number of displayed lines	Velg antall viste linjer
+2798	Ingen resultat	No results	Ingen resultat
+2799	Ved søgning efter opgave i sag, tastes opgavenummer efter sagsnummer adskilt med '-'. F.eks. 12345-1	When searching for a task in a project, enter the task number after the project number separated by '-'. E.g. 12345-1	Ved søk etter oppgave i prosjekt, skriv inn oppgavenummer etter prosjektnummer adskilt med '-'. F.eks. 12345-1
+2800	Opgave	Task	Oppgave
+2801	Timepris&comma; Akkord	Hourly rate&comma; Piecework	Timepris&comma; Akkord
+2802	Timeløn	Hourly wage	Timelønn
+2803	Timeløn&comma; Tørretid	Hourly wage&comma; Drying time	Timelønn&comma; Tørketid
+2804	Pladsarbejde	Site work	Plassarbeid
+2805	Skoleophold	School stay	Skoleophold
+2806	Sygdom	Illness	Sykdom
+2807	Barn syg	Child sick	Barn syk
+2808	Ferie	Holiday	Ferie
+2809	Dyrtid	Premium time	Dyrtid
+2810	Akkord afregning	Piecework settlement	Akkordoppgjør
+2811	Akkord med dyrtid	Piecework with premium time	Akkord med dyrtid
+2812	Plads	Site	Plass
 2813	
 2814	
 2815	

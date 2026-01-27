@@ -1,7 +1,4 @@
 bilag/*
-*temp/*
-bordplaner/temp/*
-logolib/*
 nedlagte regnskaber/*
 nedlagte_regnskaber/*
 certs/*
@@ -18,14 +15,12 @@ helm/saldi/charts
 
 bilag/
 includes/connect.php
-includes/temp/
 index/ch/
 
-docker/
+# docker/
 includes/connect.php
 #html/includes/oldDesign/
 kreditor/betalinger_old.php
-logolib/
 
 #test
 price.txt
@@ -33,14 +28,11 @@ test/
 testing/
 
 paperpdf/
-temp/
 utils/
 bilag/
-logolib/
 vouchers/
-/temp/
-/docker/
-docker/
+/# docker/
+# docker/
 SaldiAPI/
 phpmailerOld/
 phpmailer/
@@ -62,3 +54,12 @@ opret/
 
 #IDEA Jetbrains
 .idea/
+
+# Temp og log filer
+**/temp/
+**/.ht_*.log
+**/lasterror.txt
+**/selectfejl.txt
+
+# Environment
+.env

@@ -27,7 +27,8 @@ RUN set -eux; \
         gd \
         mbstring \
         zip \
-        bcmath; \
+        bcmath \
+        opcache; \
     \
     # Remove build-only deeps to keep the runtime image smaller \
     apt-get purge -y \
@@ -64,16 +65,13 @@ COPY docker/vhost.conf /etc/apache2/sites-available/000-default.conf
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# Copy application code
-COPY src/ /var/www/html/
-
-# Ensure required writable directories exist
+# Ensure required writable directories exist (in case volume mount doesn't have them)
 RUN mkdir -p /var/www/html/temp \
     /var/www/html/includes/temp \
     /var/www/html/bordplaner/temp \
     /var/www/html/logolib
 
-RUN chown -R www-data:www-data /var/www/html
+# Note: chown is handled by entrypoint.sh at runtime since src/ is volume-mounted
 
 WORKDIR /var/www/html
 

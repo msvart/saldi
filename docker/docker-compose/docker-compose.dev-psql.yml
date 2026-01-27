@@ -2,7 +2,7 @@ services:
   app:
     build:
       context: ../..
-      dockerfile: ../Dockerfile
+      dockerfile: docker/Dockerfile
     container_name: saldi_app_dev
     ports:
       - "${SALDI_PORT:-8080}:80"

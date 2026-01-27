@@ -4,7 +4,7 @@
 //               \__ \/ _ \| |_| |) | | _ | |) |  <
 //               |___/_/ \_|___|___/|_||_||___/|_\_\
 //
-// --- debitor/ordre.php --- patch 4.1.1 --- 2025-12-23 ---
+// --- debitor/ordre.php --- patch 4.1.1 --- 2026-01-21 ---
 // LICENSE
 //
 // This program is free software. You can redistribute it and / or
@@ -21,7 +21,7 @@
 // See GNU General Public License for more details.
 // http://www.saldi.dk/dok/GNU_GPL_v2.html
 //
-// Copyright (c) 2003-2025 Saldi.dk ApS
+// Copyright (c) 2003-2026 Saldi.dk ApS
 // ----------------------------------------------------------------------
 
 // 20120822 Tilrettet til NETS leverandørservice - søg 20120822
@@ -199,7 +199,7 @@
 // 20250811 PHR Corrected wrong text numbers
 // 20250819 LOE $afd checked strictly before usage
 // 20250903 LOE Enabled order to still work with account lookup when 'Offer' is active
-
+// 20260121 LOE formularsprog synched with existing language template
 @session_start();
 $s_id = session_id();
 
@@ -236,6 +236,7 @@ include("../includes/online.php");
 include("../includes/var2str.php");
 include("../includes/ordrefunc.php");
 include("../includes/tid2decimal.php");
+
 
 $title = findtekst('1092|Kundeordre', $sprog_id);
 $txt370 = findtekst('370|Kontant', $sprog_id);
@@ -486,7 +487,7 @@ if ($sort && $fokus && $b_submit == 'vareOpslag') {
 $bogfor = 1;
 
 $gruppe = 0;
-if ($id) {
+if ($id && is_numeric($id)) {
 	$r = db_fetch_array(db_select("SELECT adresser.gruppe,ordrer.status,ordrer.sprog FROM ordrer,adresser WHERE ordrer.id = '$id' AND adresser.id=ordrer.konto_id", __FILE__ . " linje " . __LINE__));
 	$status = if_isset($r, 0, 'status');
 	$gruppe = if_isset($r, 0, 'gruppe');
@@ -867,6 +868,8 @@ if (isset($_POST['copy']) && $_POST['copy']) $b_submit = 'Kopier';
 elseif (isset($_POST['credit']) && $_POST['credit']) $b_submit = 'Krediter';
 elseif (isset($_POST['delete']) && $_POST['delete']) $b_submit = 'Slet';
 elseif (isset($_POST['doInvoice']) && $_POST['doInvoice']) $b_submit = 'doInvoice';
+elseif (isset($_POST['deliver']) && $_POST['deliver']) $b_submit = 'Lever';
+elseif (isset($_POST['receive']) && $_POST['receive']) $b_submit = 'Lever';
 elseif (isset($_POST['lookUp']) && $_POST['lookUp']) $b_submit = 'Opslag';
 elseif (isset($_POST['print']) && $_POST['print']) $b_submit = 'Udskriv';
 elseif (isset($_POST['save']) && $_POST['save']) $b_submit = 'Gem';
@@ -955,7 +958,7 @@ if (isset($_POST['opdat_mailtext'])) {
 	db_modify("update ordrer set mail_subj='$mail_subj',mail_text='$mail_text' where id='$id'", __FILE__ . " linje " . __LINE__);
 }
 
-if (isset($_POST['newAccountNo']) && $newAccountNo = $_POST['newAccountNo']) {
+if (isset($_REQUEST['newAccountNo']) && $newAccountNo = $_REQUEST['newAccountNo']) {
 	if (strtolower($newAccountNo == 'n')) {
 		print "<meta http-equiv=\"refresh\" content=\"0;URL=debitorkort.php?returside=../debitor/ordre.php&ordre_id=$id&fokus=kontonr\">\n";
 		exit;
@@ -1881,7 +1884,10 @@ if ($status < 3 && $b_submit) {
 					if ($posnr_ny[$x] >= 1) {
 						$alert = str_replace("'", "`", findtekst('1841|Hint! Du skal sætte tegnet - (minus) i feltet Pos for at slette en varelinje.', $sprog_id));
 						#						if ($varenr[$x]==$rvnr) $posnr_ny[$x]+=1000;
-						db_modify("update ordrelinjer set posnr='$posnr_ny[$x]' where id='$linje_id[$x]'", __FILE__ . " linje " . __LINE__);
+						// Only update if linje_id is not empty (to avoid SQL errors with empty id)
+						if ($linje_id[$x]) {
+							db_modify("update ordrelinjer set posnr='$posnr_ny[$x]' where id='$linje_id[$x]'", __FILE__ . " linje " . __LINE__);
+						}
 					} else print "<BODY onLoad=\"javascript:alert('$alert')\">\n";
 				}
 				if (!isset($projekt[$x])) $projekt[$x] = 0;
@@ -2912,6 +2918,7 @@ function ordreside($id, $regnskab)
 	global $width;
 	global $menu;
 	global $fast_db;
+	global $formularsprog;
 
 
 	if ($menu == 'T') {
@@ -3304,7 +3311,7 @@ function ordreside($id, $regnskab)
 	if (db_fetch_array(db_select($qtxt, __FILE__ . " linje " . __LINE__))) {
 		$url = "jobkort.php?returside=ordre.php&konto_id=$konto_id&ordre_id=$id";
 		$jobkort = "<a href=$url style=\"text-decoration:none\">";
-		$jobkort .= "<input type=\"button\" style=\"width:125px; border-radius: 4px;\" value=\"" . lcfirst(findtekst('1098|Jobkort', $sprog_id)) . "\" ";
+		$jobkort .= "<input type=\"button\" style=\"width:125px; border-radius: 4px;margin: 5px;\" value=\"" . lcfirst(findtekst('1098|Jobkort', $sprog_id)) . "\" ";
 		$jobkort .= "onClick=\"window.navigate('$url')\"></a>"; #20210630
 	} else $jobkort = NULL;
 	$url = "debitorkort.php?returside=ordre.php&konto_id=$konto_id&ordre_id=$id";
@@ -3446,6 +3453,7 @@ function ordreside($id, $regnskab)
 		else print "<tr><td width=\"50%\"></td>\n";
 		print "</tbody></table>\n"; # <- Tabel 1
 		##### pile ########
+		
 		$txt140 = findtekst('140|Adresse', $sprog_id);
 		$txt666 = findtekst('666|Postnr & by', $sprog_id);
 		print "<table class='dataTableForm' cellpadding='0' cellspacing='0' style='max-width:1400px; margin: 0 auto;' bordercolor='#FFFFFF'  width='100%' border='1' valign = 'top'><tbody>\n"; #Tabel 2 ->
@@ -3477,7 +3485,10 @@ function ordreside($id, $regnskab)
 			$q = db_select("select distinct sprog from formularer order by sprog", __FILE__ . " linje " . __LINE__);
 			while ($r = db_fetch_array($q)) print "<option>$r[sprog]</option>\n";
 			print "</SELECT></td></tr>";
-		} else print "</td></tr>";
+		} else{
+			error_log("!!!! only Danish language forms set");
+			print "</td></tr>";
+		}
 
 		print "<tr><td><b>" . findtekst('2104|Udskriv til', $sprog_id) . "</b></td>";
 		#		if ($email)
@@ -3599,6 +3610,17 @@ function ordreside($id, $regnskab)
 			if ($betalings_id) print "<tr class='tableTexting2'><td><b>" . findtekst('2534|Betalings-ID', $sprog_id) . "</b></td><td align=\"right\">&nbsp;$betalings_id</td></tr>";
 			print "<tr><td colspan=\"2\"><b><hr></b></tr>\n";
 			print "<tr class='tableTexting'><td colspan=\"2\"><a href=\"ordre.php?id=$id&returside=$returside&vis_lev_addr=1\">" . findtekst('355|Vis leveringsadresse', $sprog_id) . "</td></tr>\n";
+			// Plukliste buttons
+			include("../includes/topline_settings.php");
+			$pluklisteEmail = get_settings_value("pluklisteEmail", "ordre", "");
+			print "<tr><td colspan=\"2\"><hr></td></tr>\n";
+			print "<tr><td colspan=\"2\"><p style='text-align: center;'><b>Plukliste</b></p></td></tr>\n";
+			print "<tr><td colspan=\"2\" style='border:0;height:10px;'></td></tr>\n";
+			print "<tr><td colspan=\"2\" style='border:0;border-radius:4px;text-align:center;'><button type='button' onclick=\"window.location.href='udskriftsvalg.php?id=$id&valg=-1&formular=9'\" style='$buttonStyle;cursor: pointer; padding: 0.2rem; width: 125px;'>Print plukliste</button></td></tr>\n";
+			print "<tr><td colspan=\"2\" style='border:0;height:10px;'></td></tr>\n";
+			if ($pluklisteEmail) {
+				print "<tr><td colspan=\"2\" style='border:0;border-radius:4px;'><button type='button' onclick=\"window.location.href='sendPlukliste.php?id=$id'\" style='$buttonStyle;cursor: pointer; padding: 0.2rem; width: 100%'>Send plukliste</button></td></tr>\n";
+			}
 		}
 		$lev_max = 0;
 		$q = db_select("select lev_nr from batch_salg where ordre_id = $id", __FILE__ . " linje " . __LINE__);
@@ -3613,6 +3635,7 @@ function ordreside($id, $regnskab)
 				print "<tr class='tableTexting'><td colspan=\"2\"> <a href='udskriftsvalg.php?id=$id&valg=$levnr&formular=3'>" . findtekst('576|Følgeseddel', $sprog_id) . " $levnr</a></td></tr>\n";
 			}
 		}
+		
 		if (!$formularsprog) $formularsprog = 'Dansk';
 		($art == 'DO') ? $form_nr = 4 : $form_nr = 5;
 		$qtxt = "select * from formularer where formular='$form_nr' and art='5' ";
@@ -3738,6 +3761,8 @@ function ordreside($id, $regnskab)
 						else $dg[$x] = 0;
 						$dk_db[$x] = dkdecimal($dbi[$x], 2);
 						$dk_dg[$x] = dkdecimal($dg[$x], 2);
+
+
 					}
 				}
 				if (($art == 'DK') && ($antal[$x] < 0)) $bogfor == 0;
@@ -4323,14 +4348,123 @@ function ordreside($id, $regnskab)
 			}
 		}
 		print "</SELECT></td></tr>\n";
-		if (db_fetch_array(db_select("select distinct sprog from formularer where sprog != 'Dansk'", __FILE__ . " linje " . __LINE__))) {
-			print "<tr><td title=\"" . findtekst('1468|Sprog som skal anvendes på dokumenter som tilbud, ordrer, fakturaer med videre.', $sprog_id) . "\">" . findtekst('801|Sprog', $sprog_id) . "</span></td>\n";
-			print "<td><select class = 'inputbox' style=\"width:130px\" name=\"sprog\">\n";
-			print "<option>$formularsprog</option>\n";
-			$q = db_select("select distinct sprog from formularer order by sprog", __FILE__ . " linje " . __LINE__);
-			while ($r = db_fetch_array($q)) print "<option>$r[sprog]</option>\n";
-			print "</SELECT></td>";
-		} else print "<tr><td colspan=\"2\"></td>";
+			####################******************
+			//##########
+			// Get values from tekster.csv 
+			$fp = fopen("../importfiler/tekster.csv","r");
+			if ($linje = trim(fgets($fp))) {
+				$a = explode("\t", $linje);
+			}
+			// remove first element in a 
+			array_shift($a);
+			fclose($fp);
+			###############
+				if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sprog'])) {
+					
+					  $language2 = $_POST['sprog']; // e.g. "Dansk"
+                     $sprog_id1 = array_search($language2, $a, true);
+                     $sprog_id1 = ($sprog_id1 !== false) ? $sprog_id1 + 1 : 1;
+					if($sprog_id1 != $sprog_id){
+						
+
+						if ($sprog_id1 !== '') {
+							include("../includes/connect.php");
+							// Save to database here
+							global $s_id;
+							$unixtime = time();
+							$qtxt = "UPDATE online SET logtime='$unixtime', language_id='$sprog_id1' WHERE session_id='$s_id'";
+							db_modify($qtxt,__FILE__ . " linje " . __LINE__);
+
+							$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+							$url12 = $protocol . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
+							header("Location: $url12");
+							exit;
+
+						}
+					}
+				}
+				###########
+
+			//########
+
+			// CSV-based mapping
+			// $sprog_id is 1-based; array is 0-based
+			$gac = $a[$sprog_id - 1] ;
+		
+			$language2 = $a[$sprog_id - 1] ?? $a[0];
+			
+			$formularsprog = get_settings_value('sprog', 'brugerSprog', $language2, $bruger_id);
+	
+			if (!$formularsprog) {
+
+				$qtxt = "
+					SELECT var_value
+					FROM settings
+					WHERE var_name = 'sprog'
+					AND var_grp  = 'brugerSprog'
+					AND user_id = '$bruger_id'
+					LIMIT 1
+				";
+
+				if ($r = db_fetch_array(db_select($qtxt, __FILE__ . " linje " . __LINE__))) {
+
+					// Value exists
+					$formularsprog = $r['var_value'];
+
+				} else {
+                   error_log("Inserting default language value for user $bruger_id");
+					// Not set → insert default value
+					
+
+					$itxt = "
+						INSERT INTO settings
+						(var_name, var_grp, var_value, user_id)
+						VALUES
+						('sprog', 'brugerSprog', '$formularsprog', '$bruger_id')
+					";
+					db_modify($itxt, __FILE__ . " linje " . __LINE__);
+					$formularsprog = $language2;
+				}
+			}elseif($language2 != $formularsprog){
+				error_log("User setting formularsprog is different from language2 - ".$formularsprog." vs ".$language2);
+				// update user setting
+				$utxt = "
+					UPDATE settings
+					SET var_value = '$language2'
+					WHERE var_name = 'sprog'
+					AND var_grp  = 'brugerSprog'
+					AND user_id = '$bruger_id'
+				";
+				db_modify($utxt, __FILE__ . " linje " . __LINE__);
+				$formularsprog = $language2;
+			}
+			############################************
+			if (db_fetch_array(db_select(
+				"select distinct sprog from formularer where sprog != 'Dansk'",
+				__FILE__ . " linje " . __LINE__
+			))) {
+
+				print "<tr><td title=\"" .
+					findtekst(
+						'1468|Sprog som skal anvendes på dokumenter som tilbud, ordrer, fakturaer med videre.',
+						$sprog_id
+					) . "\">" .
+					findtekst('801|Sprog', $sprog_id) .
+					"</span></td>\n";
+
+				//Select now built from CSV, values are 1-based
+				print "<td><select class='inputbox' style='width:130px' name='sprog'>\n";
+               error_log("Formularsprog is  $formularsprog and lang is ; ".print_r($a, true)."and sprog id is $sprog_id");
+				foreach ($a as $lang) {
+                   $selected = ($lang === $formularsprog) ? "selected" : "";
+                   print "<option value=\"$lang\" $selected>$lang</option>\n";
+                }      
+
+				print "</SELECT></td>";
+			}else{ 
+				error_log("####>>> >> # Only Danish language set in formularer table ####");
+				print "<tr><td colspan=\"2\"></td>";
+			}
 
 		print "<tr><td>" . findtekst('1095|Momssats', $sprog_id) . "</td><td>";
 		print "<input class='inputbox' style='text-align:right;width:60px' type='text' name='momssats' ";
@@ -4483,15 +4617,7 @@ function ordreside($id, $regnskab)
 			$list[0] = $baseCurrency;
 			$beskriv[0] = 'Danske kroner';
 			print "<td>" . findtekst('1069|Valuta', $sprog_id) . " </td>\n";
-			print "<td><select style=\"width:125px;\" class = 'inputbox' NAME=\"ny_valuta\">\n";
-			$query = db_select("select * from ordrer where id = '$id'", __FILE__ . " linje " . __LINE__);
-			$row = db_fetch_array($query);
-			$valuta = if_isset($row['valuta']); #20210719 valuta value mixed up to this place: Hence throwing undefined variable error..So it had to be redeclared
-			for ($x = 0; $x <= $tmp; $x++) {
-				if ($valuta != $list[$x]) print "<option title=\"$beskriv[$x]\">$list[$x]</option>\n";
-				else print "<option title=\"$beskriv[$x]\" selected=\"selected\">$list[$x]</option>\n";
-			}
-			print "</SELECT></td><td>";
+			print "<td><input style=\"width:130px;\" class = 'inputbox' name=\"ny_valuta\" value=\"$valuta\" onfocus=\"document.forms[0].fokus.value=this.name;\"></td><td>";
 			if ($valutakurs != 100) print "($valutakurs)";
 			print "</td>\n";
 		} else //print "<tr><td colspan=\"2\" width=\"200\">\n"; # udkommenteret 15052014
@@ -4508,22 +4634,23 @@ function ordreside($id, $regnskab)
 				$a_afd[$x] = $r['afd'];
 				$x++;
 			}
-			if (!in_array($ref, $ansat)) {
-				$r = db_fetch_array(db_select("select navn from ansatte,brugere where brugere.brugernavn='$ref' and ansatte.id=" . nr_cast('brugere.ansat_id') . "", __FILE__ . " linje " . __LINE__));
-				if (!empty($r['navn'])) $ref = $r['navn']; #20210715
-
+			if (!in_array($ref,$ansat)) {
+				$r=db_fetch_array(db_select("select navn from ansatte,brugere where brugernavn='$ref' and ansatte.id=".nr_cast('brugere.ansat_id')."",__FILE__ . " linje " . __LINE__));
+				if (!empty($r['navn'])) $ref=$r['navn']; #20210715
+				
 			}
-
-			for ($x = 0; $x < count($ansat); $x++) {
+			
+			for ($x=0;$x<count($ansat);$x++) {
 				if (!$x) {
-					print "<tr><td>" . findtekst('1097|Vor ref.', $sprog_id) . "</td>\n";
-					print "<td><select style=\"width:125px;\" class = 'inputbox' name=\"ref\" $disabled>\n";
-					print "<option>$ref</option>\n";
+				print "<tr><td>".findtekst(1097,$sprog_id)."</td>\n";
+				print "<td><select style=\"width:130px;\" class = 'inputbox' name=\"ref\" $disabled>\n";
+				print "<option>$ref</option>\n";
 				}
-				if ($ref != $ansat[$x]) print "<option> $ansat[$x]</option>\n";
+				if ($ref!=$ansat[$x]) print "<option> $ansat[$x]</option>\n";
 			}
+
+					
 		}
-		print "</select>\n";
 		$x = 0;
 		$afd_navn = array();
 		$afd_nr[$x] = array();
@@ -4537,11 +4664,12 @@ function ordreside($id, $regnskab)
 		// Ensure afd is set from user settings for new orders before rendering dropdown
 		if (!$id) {
 			$afd = get_settings_value('afd', 'brugerAfd', 1, $bruger_id);
+				
 		}
 		print "<input type = 'hidden' name='extAfd' value='$afd'>";
 		if (count($afd_nr) > 1) {
 			print "</td><td></td>\n";
-			print "<td>" . findtekst('1198|Afd.', $sprog_id) . "</td><td><select style=\"width:125px;\" class = 'inputbox' name=\"afd\">";
+			print "<td>" . findtekst('1198|Afd.', $sprog_id) . "</td><td><select style=\"width:130px;\" class = 'inputbox' name=\"afd\">";
 			for ($x = 0; $x < count($afd_nr); $x++) {
 				if ($afd_nr[$x] == $afd) print "<option value=\"$afd_nr[$x]\" selected>$afd_nr[$x] $afd_navn[$x]</option>";
 			}
@@ -4595,12 +4723,7 @@ function ordreside($id, $regnskab)
 		if ($x > 0) {
 			$vis_projekt = 'on';
 			print "<td title=\"" . findtekst('1473|Hvis hele ordren skal registreres på et projekt, vælges projektet her. Ellers anvendes projektfeltet på ordrelinjen.', $sprog_id) . "\">" . findtekst('553|Projekt', $sprog_id) . "</td>\n";
-			print "<td><select class = 'inputbox' name=\"projekt[0]\">\n";
-			for ($x = 0; $x <= $projektantal; $x++) {
-				if ($projekt[0] != $list[$x]) print "<option title=\"$beskriv[$x]\">$list[$x]</option>\n";
-				else print "<option title=\"$beskriv[$x]\" selected=\"selected\">$list[$x]</option>\n";
-			}
-			print "</select>";
+			print "<td><input class = 'inputbox' name=\"projekt[0]\" value=\"{$projekt[0]}\" onfocus=\"document.forms[0].fokus.value=this.name;\"></td>\n";
 		} else print "<tr><td colspan=\"2\" width=\"200\"></tr>\n";
 
 
@@ -4636,7 +4759,7 @@ function ordreside($id, $regnskab)
 			print "<input type=\"hidden\" name=\"felt_4\" style=\"width:200px\" value=\"$felt_4\">\n";
 			#print "<input type=\"hidden\" name=\"felt_5\" style=\"width:200px\" value=\"$felt_5\">\n";
 		} else {
-			print "<tr><td align=\"center\">$jobkort $debitorkort</td><td align=\"left\">" . findtekst('355|Vis leveringsadresse', $sprog_id) . " <input class='checkmark' type=\"checkbox\" name=\"vis_lev_addr\"><td></tr>\n";
+			print "<tr><td align=\"center\">$jobkort $debitorkort</td><td align=\"center\">" . findtekst('355|Vis leveringsadresse', $sprog_id) . " <input class='checkmark' type=\"checkbox\" name=\"vis_lev_addr\"><td></tr>\n";
 			print "<tr><td colspan=\"2\"><hr><td></tr>\n";
 			print "<tr><td colspan=\"2\" align=\"center\"><b>" . findtekst('243|Ekstrafelter', $sprog_id) . "</b></tr>\n";
 			print "<tr><td colspan=\"2\"><hr></b></tr>\n";
@@ -4788,6 +4911,17 @@ function ordreside($id, $regnskab)
 				if (substr(findtekst('248|Ordrefelt 5', $sprog_id), 0, 1) != "#") print "<tr><td><span onmouseover=\"return overlib('" . findtekst('253|Denne tekst kan rettes under <i>Indstillinger</i> -> <i>Diverse</i> -> <i>Sprog</i><br>Find Id 248 & 253.', $sprog_id) . "',WIDTH=600);\" onmouseout=\"return nd();\">" . findtekst('248|Ordrefelt 5', $sprog_id) . "</span></td><td><input class = 'inputbox' type = 'text' name=\"felt_5\" style=\"width:200px\" value=\"$felt_5\" $disabled></td></tr>\n";
 			}
 			if ($betalings_id) print "<tr><td>" . findtekst('2534|Betalings-ID', $sprog_id) . ":</td><td>&nbsp;$betalings_id</td></tr>";
+			// Plukliste buttons
+			include("../includes/topline_settings.php");
+			$pluklisteEmail = get_settings_value("pluklisteEmail", "ordre", "");
+			print "<tr><td colspan=\"2\"><hr></td></tr>\n";
+			print "<tr><td colspan=\"2\"><p style='text-align: center;'><b>Plukliste</b></p></td></tr>\n";
+			print "<tr><td colspan=\"2\" style='border:0;height:10px;'></td></tr>\n";
+			print "<tr><td colspan=\"2\" style='border:0;border-radius:4px; text-align: center;'><button type='button' onclick=\"window.location.href='udskriftsvalg.php?id=$id&valg=-1&formular=9'\" style='$buttonStyle;cursor: pointer; padding: 0.2rem; width: 125px;'>Print plukliste</button></td></tr>\n";
+			print "<tr><td colspan=\"2\" style='border:0;height:10px;'></td></tr>\n";
+			if ($pluklisteEmail) {
+				print "<tr><td colspan=\"2\" style='border:0;border-radius:4px; text-align: center;'><button type='button' onclick=\"window.location.href='sendPlukliste.php?id=$id'\" style='$buttonStyle;cursor: pointer; padding: 0.2rem; width: 125px'>Send plukliste</button></td></tr>\n";
+			}
 			print "<input type=\"hidden\" name=\"lev_navn\" value=\"$lev_navn\">\n";
 			print "<input type=\"hidden\" name=\"lev_addr1\" value=\"$lev_addr1\"><input type=\"hidden\" name=\"lev_addr2\" value=\"$lev_addr2\">\n";
 			print "<input type=\"hidden\" name=\"lev_postnr\" value=\"$lev_postnr\"><input type=\"hidden\" name=\"lev_bynavn\" value=\"$lev_bynavn\">\n";
@@ -4892,7 +5026,10 @@ function ordreside($id, $regnskab)
 			$lines_found++;
 			if ($row['posnr'] > 0) $lines_with_posnr_gt_0++;
 			if (is_numeric($row['samlevare'])) $lines_with_numeric_samlevare++;
-			if ($row['posnr'] > 0 && !is_numeric($row['samlevare'])) {  #Hvis "samlevare" er numerisk,indgaar varen i den ordrelinje,der refereres til - hvis "on" er varen en samlevare.
+			# Fix for duplicate positions: If item has both saet AND samlevare='on', it's a huvudvaren in a saet collection
+			# and will be rendered separately at lines 5151-5152, so skip it here
+			$is_huvudvaren_in_saet = ($row['saet'] && $row['samlevare'] == 'on');
+			if ($row['posnr'] > 0 && !is_numeric($row['samlevare']) && !$is_huvudvaren_in_saet) {  #Hvis "samlevare" er numerisk,indgaar varen i den ordrelinje,der refereres til - hvis "on" er varen en samlevare.
 				$x++;
 				$linje_id[$x]        = $row['id'];
 				$kred_linje_id[$x]   = $row['kred_linje_id'];
@@ -4977,6 +5114,7 @@ function ordreside($id, $regnskab)
 					else $dg[$x] = 0;
 					$dk_db[$x] = dkdecimal($dbi[$x], 2);
 					$dk_dg[$x] = dkdecimal($dg[$x], 2);
+					
 				}
 				if (($art == 'DK') && ($antal[$x] < 0)) $bogfor == 0;
 				if ($serienr[$x]) {
@@ -5166,8 +5304,12 @@ function ordreside($id, $regnskab)
 			if ($saet[$x] && $saetpris) {
 				$y = $x + 1;
 				if (!$samlevare[$x] && $saet[$x] && ($saet[$x + 1] != $saet[$x] || $samlevare[$x + 1])) {
-					$r = db_fetch_array(db_select("select id,beskrivelse,lager from ordrelinjer where saet = '$saet[$x]' and ordre_id='$id' and samlevare='on'", __FILE__ . " linje " . __LINE__));
-					list($sum, $dbsum, $blandet_moms, $moms) = explode(chr(9), ordrelinjer($x, $sum, $dbsum, $blandet_moms, $moms, $antal_ialt, '0', '0', '0', '0', '0', '0', '', '', $r['beskrivelse'], '', $r['lager'], $saetpris, '0', 'percent', '100', '1', '0', '0', '0', '', '0', '0', '0', '', '', '', '', '', '', '', '', '', '', '', '', '0', '', '0', $saetnr, $grossWeight[$x], $netWeight[$x], $itemLength[$x], $itemWidth[$x], $itemHeight[$x], $volume[$x], __LINE__));
+					$r = db_fetch_array(db_select("select id,varenr,beskrivelse,lager,vare_id,pris,antal from ordrelinjer where saet = '$saet[$x]' and ordre_id='$id' and samlevare='on'", __FILE__ . " linje " . __LINE__));
+					if ($r) { # Render even if varenr is empty (ordrelinjer now handles this for collections)
+						# Use saetpris if available, otherwise use hovedvaren's own price * antal
+						$display_price = $saetpris > 0 ? $saetpris : ($r['pris'] * ($r['antal'] ?: 1));
+						list($sum, $dbsum, $blandet_moms, $moms) = explode(chr(9), ordrelinjer($x, $sum, $dbsum, $blandet_moms, $moms, $antal_ialt, '0', '0', '0', '0', $r['id'], '0', '', $r['varenr'], $r['beskrivelse'], '', $r['lager'], $display_price, '0', 'percent', '100', '1', '0', '0', $r['vare_id'], '', '0', '0', '0', '', 'on', '', '', '', '', '', '', '', '', '', '', '0', '', $saet[$x], $saetnr, $grossWeight[$x], $netWeight[$x], $itemLength[$x], $itemWidth[$x], $itemHeight[$x], $volume[$x], __LINE__));
+					}
 					$saetnr = 0;
 				}
 			}
@@ -5421,8 +5563,8 @@ function ordreside($id, $regnskab)
 			}
 
 			if ($status == 1 && $bogfor != 0 && $hurtigfakt != 'on' && $leveres_ialt) {
-				if ($art == 'DO') print "<td align=\"center\"  width=$width><input type=\"submit\" class=\"button gray medium\" style=\"width:75px; border-radius: 4px;\" accesskey=\"l\" value=\"" . findtekst('1483|Levér', $sprog_id) . "\" name=\"b_submit\" onclick=\"javascript:docChange = false;\"></td>\n";
-				else print "<td align=\"center\" width=$width title=\"" . findtekst('1491|Klik her for at tage varer retur', $sprog_id) . "\"><input type=\"submit\"  class=\"button gray medium\" style=\"width:75px; border-radius: 4px;\" accesskey=\"l\" value=\"" . findtekst('1485|Modtag', $sprog_id) . "\" name=\"b_submit\" onclick=\"javascript:docChange = false;\"></td>\n";
+				if ($art == 'DO') print "<td align=\"center\"  width=$width><input type=\"submit\" class=\"button gray medium\" style=\"width:75px; border-radius: 4px;\" accesskey=\"l\" value=\"" . findtekst('1483|Levér', $sprog_id) . "\" name=\"deliver\" onclick=\"javascript:docChange = false;\"></td>\n";
+				else print "<td align=\"center\" width=$width title=\"" . findtekst('1491|Klik her for at tage varer retur', $sprog_id) . "\"><input type=\"submit\"  class=\"button gray medium\" style=\"width:75px; border-radius: 4px;\" accesskey=\"l\" value=\"" . findtekst('1485|Modtag', $sprog_id) . "\" name=\"receive\" onclick=\"javascript:docChange = false;\"></td>\n";
 			}
 			$confirm2  = findtekst('1524|Faktura sendes som email til', $sprog_id); #Faktura sendes som email til
 			$confirm3  = findtekst('1525|Faktura tilføjes PBS/Nets liste!', $sprog_id);
@@ -5467,12 +5609,6 @@ function ordreside($id, $regnskab)
 							$disabled = 'disabled';
 							$titletext = "$tiltext ($felt_2+$felt_4 - $sum+$moms = $diff)";
 						}
-						$query = db_select("SELECT * FROM settings WHERE var_name = 'showPaymentLink' AND var_grp = 'deb_ordre' AND var_value = 'on'", __FILE__ . " linje " . __LINE__);
-						if ($r = db_fetch_array($query)) {
-							$vis_betalingslink = 1;
-						} else {
-							$vis_betalingslink = 0;
-						}
 						if (!$betalt && $vis_betalingslink) $disabled = 'disabled';
 					}
 					// Made for Havemøbelshoppen
@@ -5480,7 +5616,8 @@ function ordreside($id, $regnskab)
 						$disabled = '';
 					}
 					$txt = findtekst('2374|Fakturér', $sprog_id);
-					print "<td align='center' width='$width' title='$titletext'><input $disabled type='submit' class='button gray medium' style='width:75px; border-radius: 4px;' accesskey='f' value='$txt' name='doInvoice' $tmp></td>\n";
+					$disabled_style = ($disabled) ? "opacity:0.6; cursor:not-allowed; background-color:#cccccc;" : "";
+					print "<td align='center' width='$width' title='$titletext'><input $disabled type='submit' class='button gray medium' style='width:75px; border-radius: 4px; $disabled_style' accesskey='f' value='$txt' name='doInvoice' $tmp></td>\n";
 				} else {
 					if ($vis_saet) {
 						$disabled = NULL;
@@ -5494,6 +5631,7 @@ function ordreside($id, $regnskab)
 					}
 					if ($art == 'DO' && $dan_kn) $tmp = "onclick=\"return confirm('$confirm10')\"";
 					if ($mail_fakt) $tmp = "onclick=\"return confirm('$confirm11 $email')\"";
+					
 					print "<td align=\"center\" width=\"$width\" title=\"$titletext\"><input $disabled type=\"submit\" class=\"button gray medium\" style=\"width:75px; border-radius:4px;\" accesskey=\"f\" value=\"Kredit&eacute;r\" name=\"b_submit\" $tmp></td>\n";
 				}
 			} elseif ($del_ordre == 'on') {
@@ -5753,6 +5891,12 @@ function ordrelinjer($x, $sum, $dbsum, $blandet_moms, $moms, $antal_ialt, $lever
 	global $tdlv, $txt370;
 	global $sprog_id;
 
+	$pris_num = is_numeric($pris) ? (float)$pris : 0;
+	$kostpris_num = is_numeric($kostpris) ? (float)$kostpris : 0;
+	$db_new = $pris_num - $kostpris_num;
+	$db_original = afrund($db_new, 2);
+	$dg_original = ($pris_num != 0) ? afrund($db_new / $pris_num * 100, 2) : 0;
+
 	if (!isset($reserveret[$x])) $reserveret[$x] = 0;
 	$beskrivelse = str_replace("&lt;br&gt;", "\r\n", $beskrivelse);
 	$beskrivelse = str_replace("&lt;BR&gt;", "\r\n", $beskrivelse);
@@ -5763,7 +5907,7 @@ function ordrelinjer($x, $sum, $dbsum, $blandet_moms, $moms, $antal_ialt, $lever
 	#lse cho "$beskrivelse $pris<br>";
 	#  if (!$ny_pos) $ny_pos=1;
 	if ($readonly) $readonly = "readonly=\"readonly\"";
-	if ($varenr) {
+	if ($varenr || ($saet && $samlevare)) {
 		if ($rabatart == 'amount') $ialt = ($pris - $rabat) * $antal;
 		else $ialt = ($pris - ($pris / 100 * $rabat)) * $antal;
 		if ($procentfakt) {
@@ -5803,45 +5947,55 @@ function ordrelinjer($x, $sum, $dbsum, $blandet_moms, $moms, $antal_ialt, $lever
 		$disabled = NULL;
 	}
 	#  if ($x) {
-	print "<input type=\"hidden\" name=\"linje_id[$x]\" value=\"$linje_id\">\n";
-	print "<input type=\"hidden\" name=\"kred_linje_id[$x]\" value=\"$kred_linje_id\">\n";
-	print "<input type=\"hidden\" name=\"vare_id[$x]\" value=\"$vare_id\">\n";
-	print "<input type=\"hidden\" name=\"antal[$x]\" value=\"$antal\">\n";
-	print "<input type=\"hidden\" name=\"serienr[$x]\" value=\"$serienr\">\n";
-	print "<input type=\"hidden\" name=\"momsfri[$x]\" value=\"$momsfri\">\n";
-	print "<input type=\"hidden\" name=\"varemomssats[$x]\" value=\"$varemomssats\">\n";
-	print "<input type=\"hidden\" name=\"proc$x\" value=\"$procent\">\n";
-	print "<input type=\"hidden\" name=\"saet[$x]\" value=\"$saet\">\n";
-	print "<input type=\"hidden\" name=\"samlevare[$x]\" value=\"$samlevare\">\n";
-	print "<input type=\"hidden\" name=\"kostpris[$x]\" value=\"$kostpris\">\n"; #20170906
-	print "<input type=\"hidden\" name=\"lager[$x]\" value=\"$lager\">\n";
+	// Hidden inputs will be printed inside the TR element to enable drag-and-drop
+	// Store values for later use inside the TR
+	$hidden_inputs = "";
+	$hidden_inputs .= "<input type=\"hidden\" name=\"linje_id[$x]\" value=\"$linje_id\">\n";
+	$hidden_inputs .= "<input type=\"hidden\" name=\"kred_linje_id[$x]\" value=\"$kred_linje_id\">\n";
+	$hidden_inputs .= "<input type=\"hidden\" name=\"vare_id[$x]\" value=\"$vare_id\">\n";
+	$hidden_inputs .= "<input type=\"hidden\" name=\"antal[$x]\" value=\"$antal\">\n";
+	$hidden_inputs .= "<input type=\"hidden\" name=\"serienr[$x]\" value=\"$serienr\">\n";
+	$hidden_inputs .= "<input type=\"hidden\" name=\"momsfri[$x]\" value=\"$momsfri\">\n";
+	$hidden_inputs .= "<input type=\"hidden\" name=\"varemomssats[$x]\" value=\"$varemomssats\">\n";
+	$hidden_inputs .= "<input type=\"hidden\" name=\"proc$x\" value=\"$procent\">\n";
+	$hidden_inputs .= "<input type=\"hidden\" name=\"saet[$x]\" value=\"$saet\">\n";
+	$hidden_inputs .= "<input type=\"hidden\" name=\"samlevare[$x]\" value=\"$samlevare\">\n";
+	$hidden_inputs .= "<input type=\"hidden\" name=\"kostpris[$x]\" value=\"$kostpris\">\n";
+	$hidden_inputs .= "<input type=\"hidden\" name=\"lager[$x]\" value=\"$lager\">\n";
 	#  if ($art=='OT' || $saetnr || ($rvnr && $rabat)) { // Når input fields er 'disabled' bliver de ikke opdateret, derfor tilføjes hidden fields
-	print "<input type=\"hidden\" name=\"beskrivelse$x\" value=\"$beskrivelse\">\n";
-	if ($fokus != "pris$x") print "<input type=\"hidden\" name=\"pris$x\" value=\"$dkpris\">\n";
-	print "<input type=\"hidden\" name=\"raba$x\" value=\"$dkrabat\">\n";
-	print "<input type=\"hidden\" name=\"vare$x\" value=\"$varenr\">\n"; #Tilføjet 20161011 Hvis fjernes fungerer "samlet pris ikke"
-	print "<input type=\"hidden\" name=\"posn$x\" value=\"$ny_pos\">\n";
+	$hidden_inputs .= "<input type=\"hidden\" name=\"beskrivelse$x\" value=\"$beskrivelse\">\n";
+	if ($fokus != "pris$x") $hidden_inputs .= "<input type=\"hidden\" name=\"pris$x\" value=\"$dkpris\">\n";
+	$hidden_inputs .= "<input type=\"hidden\" name=\"raba$x\" value=\"$dkrabat\">\n";
+	$hidden_inputs .= "<input type=\"hidden\" name=\"vare$x\" value=\"$varenr\">\n"; #Tilføjet 20161011 Hvis fjernes fungerer "samlet pris ikke"
+	$hidden_inputs .= "<input type=\"hidden\" name=\"posn$x\" value=\"$ny_pos\">\n";
+	if ($saet && $samlevare) {
+		$hidden_inputs .= "<input type=\"hidden\" name=\"dkan$x\" value=\"$dkantal\">\n";
+	}
 	if ($fokus == 'dkan' . $x) { #20151019
-		print "<input type=\"hidden\" name=\"dkantal[$x]\" value=\"$dkantal\">\n";
-		print "<input type=\"hidden\" name=\"fokus\" value=\"pris$x\">\n";
+		$hidden_inputs .= "<input type=\"hidden\" name=\"dkantal[$x]\" value=\"$dkantal\">\n";
+		$hidden_inputs .= "<input type=\"hidden\" name=\"fokus\" value=\"pris$x\">\n";
 	}
 	#  }
 	$prplho = NULL;
-
-	print "<td></td>";
 
 	if ($fokus == 'pris' . $x) { #20151019
 		if ($pris == 0) $prplho = "placeholder=\"0,00\"";
 		else $fokus = 'vare0';
 	}
 	#  }
-	if ($saet && $samlevare) {
-		print "<input type=\"hidden\" name=\"posn$x\" value=\"$ny_pos\">\n";
-		print "<input type=\"hidden\" name=\"vare$x\" value=\"$varenr\">\n";
-		print "<input type=\"hidden\" name=\"dkan$x\" value=\"$dkantal\" onfocus='this.select()'>\n";
-	} else {
-		$txtColor = 'black';
-		$qtyTitle = '';
+	#  }
+	
+	// Start the row and print hidden inputs for ALL row types
+	($x) ? $y = NULL : $y = '_';
+    // Main collection items should be visible now
+    $rowStyle = "";
+	print "<tr class='ordrelinje' $rowStyle data-line-id='$x'>\n";
+	print "<td style='display:none;'>$hidden_inputs</td>\n";
+	
+	print "<td class='drag-handle' style='cursor:move; text-align:center; vertical-align:middle; width:30px; background:#f5f5f5;'>⋮⋮</td>";
+
+	$txtColor = 'black';
+	$qtyTitle = '';
 		$stockQty = $min_lager = 0;
 		if ($lager && $vare_id) {
 			$g = 0;
@@ -5878,13 +6032,8 @@ function ordrelinjer($x, $sum, $dbsum, $blandet_moms, $moms, $antal_ialt, $lever
 			}
 		}
 		($x) ? $y = NULL : $y = '_';
-		// print "<tr class='ordrelinje'>\n";
-		print "<tr class='ordrelinje' data-line-id='$x'>\n";
-		#    print "<td valign = 'top'><div onClick='this.form.submit();'><a>X</a></div></td>";
-		// print "<input class = 'inputbox' type = 'text' $readonly style=\"text-align:right;width:50px;\" name=\"posn$x\" value=\"$ny_pos\" $disabled></td>\n";
-		print "<td class='drag-handle' style='cursor:move; text-align:center; vertical-align:middle; width:30px; background:#f5f5f5;'>⋮⋮</td>";
-
-		// print "<td class='drag-handle' style='cursor:move; text-align:center; vertical-align:middle; width:30px; background:#f5f5f5;'>⋮⋮</td>";
+		// TR and hidden inputs already printed above
+		
 		print "<td valign='top'><input class='inputbox' type='text' style='text-align:right;width:50px;' name='posn$x' value='$ny_pos' $disabled></td>\n";
 		$title = "Nt/Bt " . number_format($grossWeight, 1, ',', '.') . "/" . number_format($netWeight, 1, ',', '.') . " kg. ";
 		$title .= "L: " . number_format($itemLength, 0, ',', '.') . " B: " . number_format($itemWidth, 0, ',', '.') . " ";
@@ -5921,15 +6070,22 @@ function ordrelinjer($x, $sum, $dbsum, $blandet_moms, $moms, $antal_ialt, $lever
 		elseif ($saetnr || ($rvnr && $rabat)) $dis = NULL;
 		else $dis = $disabled;
 		print "<td valign = 'top' title=\"$title\"><textarea class=\"autosize inputbox ordreText comment\" $readonly rows=\"1\" cols=\"58\" name=\"beskrivelse$x\" onchange=\"javascript:docChange = true;\" $dis>$beskrivelse</textarea></td>\n";
-	}
 	if ($saet) {
-		print "<td><input type=\"hidden\" name=\"pris$x\" value=\"$dkpris\"></td><td>
-     		<input class = 'inputbox' type=\"hidden\" name=\"raba$x\" value=\"$dkrabat\"></td>
-			<input type=\"hidden\" name=\"posn$x\" value=\"$ny_pos\">\n";
+		// Hidden inputs pris, raba, posn are already in $hidden_inputs
+		if ($samlevare) {
+			// Print Price and Discount for main item ONLY
+			print "<td valign = 'top' title=\"" . findtekst('1499|Kost', $sprog_id) . ": " . dkdecimal($kostpris, 2) . " - db: $dk_db - dg: $dk_dg%\"><input class = 'inputbox' type = 'text' $readonly style=\"text-align:right;\" size=\"10\" $prplho name=\"pris$x\" value=\"$dkpris\" onchange=\"javascript:docChange = true;\" onfocus=\"if(this.value == '0,00') {this.value=''}\" onblur=\"if(this.value == ''){this.value ='0,00'}\" $disabled></td>\n";
+			$title = $dkantal . "*" . dkdecimal(($rabat / 100) * $pris, 2) . "% = " . dkdecimal($antal * ($rabat / 100) * $pris, 2);
+			print "<td valign = 'top' title=\"$title\"><input class = 'inputbox' type = 'text' $readonly style=\"text-align:right\" size=\"4\" name=\"raba$x\" value=\"$dkrabat\" onchange=\"javascript:docChange = true;\" onfocus=\"if(this.value == '0,00') {this.value=''}\" onblur=\"if(this.value == ''){this.value ='0,00'}\" $disabled></td>\n";
+		} else {
+			// Just print empty cells to maintain table alignment for sub-items
+			print "<td></td><td></td>";
+		}
 	} elseif ($saetnr) {
-		print "<td><input type=\"hidden\" name=\"pris$x\" value=\"" . dkdecimal($pris, 2) . "\"></td><td><input class = 'inputbox' type=\"hidden\" name=\"raba$x\" value=\"0\"></td>";
+		// Hidden inputs are in $hidden_inputs
+		print "<td></td><td></td>";
 	} elseif (!$rvnr) {
-		print "<td valign = 'top' title=\"" . findtekst('1499|Kost', $sprog_id) . ": " . dkdecimal($kostpris, 2) . " - db: $dk_db - dg: $dk_dg%\"><input class = 'inputbox' type = 'text' $readonly style=\"text-align:right;\" size=\"10\" $prplho name=\"pris$x\" value=\"$dkpris\" onchange=\"javascript:docChange = true;\" onfocus=\"if(this.value == '0,00') {this.value=''}\" onblur=\"if(this.value == ''){this.value ='0,00'}\" $disabled></td>\n"; #2013.11.29 Fjerner 0,00 ved fokus, og tilføjer 0,00 hvis feltet er tomt
+		print "<td valign = 'top' title=\"" . findtekst('1499|Kost', $sprog_id) . ": " . dkdecimal($kostpris, 2) . " - db: $db_original - dg: $dg_original%\"><input class = 'inputbox' type = 'text' $readonly style=\"text-align:right;\" size=\"10\" $prplho name=\"pris$x\" value=\"$dkpris\" onchange=\"javascript:docChange = true;\" onfocus=\"if(this.value == '0,00') {this.value=''}\" onblur=\"if(this.value == ''){this.value ='0,00'}\" $disabled></td>\n"; #2013.11.29 Fjerner 0,00 ved fokus, og tilføjer 0,00 hvis feltet er tomt
 		$title = $dkantal . "*" . dkdecimal(($rabat / 100) * $pris, 2) . "% = " . dkdecimal($antal * ($rabat / 100) * $pris, 2);
 		print "<td valign = 'top' title=\"$title\"><input class = 'inputbox' type = 'text' $readonly style=\"text-align:right\" size=\"4\" name=\"raba$x\" value=\"$dkrabat\" onchange=\"javascript:docChange = true;\" onfocus=\"if(this.value == '0,00') {this.value=''}\" onblur=\"if(this.value == ''){this.value ='0,00'}\" $disabled></td>\n";
 	} else print "<td></td><td></td>";
@@ -5945,7 +6101,7 @@ function ordrelinjer($x, $sum, $dbsum, $blandet_moms, $moms, $antal_ialt, $lever
 	$dk_db = dkdecimal($dkb, 2);
 	$dk_dg = dkdecimal($dg, 2);
 	if ($art == 'DK') $ialt = (float)$ialt * -1;
-	if ($varenr) {
+	if ($varenr || ($saet && $samlevare)) {
 		if ($rvnr) {
 			$disabled = 'disabled';
 			if ($incl_moms && !$momsfri) $tmp = dkdecimal($antal * ($pris + $pris * $varemomssats / 100), 2);
@@ -5956,7 +6112,11 @@ function ordrelinjer($x, $sum, $dbsum, $blandet_moms, $moms, $antal_ialt, $lever
 		}
 	} else $tmp = NULL;
 	if ($saet) {
-		print "<td></td>";
+		if ($samlevare) {
+			print "<td valign = 'top' align=\"right\" title=\"db: $dk_db - dg: $dk_dg%\"><input class = 'inputbox' type = 'text' readonly=\"readonly\" style=\"background: none repeat scroll 0 0 #e4e4ee; text-align:right\" size=\"10\" value=\"$tmp\" $disabled></td>\n";
+		} else {
+			print "<td></td>";
+		}
 	} elseif ($saetnr || $varenr == $rvnr) {
 		if ($saetnr) {
 			$qtxt = "select lev_varenr from ordrelinjer where samlevare='on' and saet='$saetnr' and ordre_id='$id'";
@@ -6090,7 +6250,7 @@ function ordrelinjer($x, $sum, $dbsum, $blandet_moms, $moms, $antal_ialt, $lever
 		print "<td align=\"center\" onClick=\"serienummer($linje_id)\" title=\"" . findtekst('1501|Vælg serienr', $sprog_id) . "\"><img alt=\"" . findtekst('1497|Serienummer', $sprog_id) . "\" src=\"../ikoner/serienr.png\"></td>\n"; #20210715
 
 	} else {
-		// print "<td></td>";
+		print "<td></td>";
 
 	}
 
@@ -6265,7 +6425,9 @@ if ($menu == 'T') {
 ?>
 <!--  -->
 
+<link rel="stylesheet" type="text/css" href="../css/ordreAutocomplete.css">
 <script src="../javascript/tablenav.js"></script>
+<script src="../javascript/ordreAutocomplete.js"></script>
 
 
 

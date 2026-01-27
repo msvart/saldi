@@ -1,5 +1,4 @@
 services:
-  saldidb:
   db:
     image: postgres:15
     container_name: saldi_db
@@ -10,7 +9,7 @@ services:
     volumes:
       - saldi_data:/var/lib/postgresql/data
     healthcheck:
-    test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -18,4 +17,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  saldi_db_data:
+  saldi_data:

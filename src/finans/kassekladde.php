@@ -4,7 +4,7 @@
 //               \__ \/ _ \| |_| |) | | _ | |) |  <
 //               |___/_/ \_|___|___/|_||_||___/|_\_\
 //
-// --- finans/kassekladde.php --- ver 4.1.1 --- 2026-01-14 ---
+// --- finans/kassekladde.php --- ver 5.0.0 --- 2026-01-26 ---
 // LICENSE
 //
 // This program is free software. You can redistribute it and / or
@@ -92,6 +92,8 @@
 // 20250528 Sawaneh -  Added position-based sorting to kassekladde entries
 // 20251022 LOE - Updated some variables to use the  function if_isset() to minimize errors
 // 20251024 LOE - Static Headers, footer and pagination applied.
+// 20260126 PHR - Moved "</tr>" down to include $saldo
+
 ob_start(); //Starter output buffering
 
 @session_start();
@@ -148,6 +150,7 @@ print '<link rel="stylesheet" type="text/css" href="../css/daterangepicker.css" 
 
 
 
+
 $langId = !empty($sprog_id) ? intval($sprog_id) : 1;
 print '<script>
 window.saldiLanguage = ' . $langId . ';
@@ -189,7 +192,7 @@ print '<script src="../javascript/datepickerDa.js"></script>';
 print "<script LANGUAGE='javascript' TYPE='text/javascript' SRC='../javascript/confirmclose.js'></script>";
 print "<script LANGUAGE='JavaScript' TYPE='text/javascript' SRC='../javascript/overlib.js'></script>";
 print '<link rel="stylesheet" type="text/css" href="../css/accountAutocomplete.css">';
-print '<script src="../javascript/accountAutocomplete.js" defer></script>';
+print '<script src="../javascript/accountAutocomplete.js?v=4.1.2" defer></script>';
 print "<script>
 	function fokuser(that, fgcolor, bgcolor){
 		that.style.color = fgcolor;
@@ -204,7 +207,19 @@ print "<script>
 print '<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>';
 include("kassekladde_includes/moveButton.php");
 include("kassekladde_includes/moveButtonStyle.php");
+########################
 
+// Handle AJAX duplicate line request
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST'
+    && isset($_POST['action'])
+    && $_POST['action'] === 'duplicate_line'
+) {
+   include("kassekladde_includes/duplicate_line.php");
+}
+
+
+#######################
 $page_display = true;
 if (!isset($tidspkt))
 	$tidspkt = 0;
@@ -235,11 +250,12 @@ if ($tjek = if_isset($_GET['tjek'])) {
 			db_modify("update kladdeliste set hvem = '$brugernavn',tidspkt='$tidspkt' where id = '$tjek'", __FILE__ . " linje " . __LINE__);
 		}
 	}
+/*
 	if (db_fetch_array(db_select("select id from tmpkassekl where kladde_id='$tjek'", __FILE__ . " linje " . __LINE__)))
 		$fejl = 1;
 	else
 		$fejl = 0;
-
+*/
 	if ($r = db_fetch_array(db_select("select * from grupper where ART = 'KASKL' and kode='1' and kodenr='$bruger_id'", __FILE__ . " linje " . __LINE__))) {
 		$kksort = $r['box1'];
 		$kontrolkonto = $r['box2'];
@@ -1010,7 +1026,7 @@ if ($x == $antal - 1 && $kladde_id) { // only after last line
 						financeLookup($find, 'kontonr', $fokus, $opslag_id, $id[$opslag_id], $kladde_id, $bilag[$opslag_id], $dato[$opslag_id], $beskrivelse[$opslag_id], $d_type[$opslag_id], $debet[$opslag_id], $k_type[$opslag_id], $kredit[$opslag_id], $faktura[$opslag_id], $belob[$opslag_id], $momsfri[$opslag_id], $afd[$opslag_id], $projekt[$opslag_id], $ansat[$opslag_id], $valuta[$opslag_id], $forfaldsdato[$opslag_id], $betal_id[$opslag_id], $opslag_id);
 					}
 				}
-				if ((strstr($fokus, "fakt")) || (strstr($fokus, "belo"))) {
+				if ((strstr($fokus, "fakt"))) {
 					include("kassekladde_includes/openpost_inc.php");
 					openpost($find, 'firmanavn', $fokus, $opslag_id, $id[$opslag_id], $kladde_id, $bilag[$opslag_id], $dato[$opslag_id], $beskrivelse[$opslag_id], $d_type[$opslag_id], $debet[$opslag_id], $k_type[$opslag_id], $kredit[$opslag_id], $faktura[$opslag_id], $belob[$opslag_id], $momsfri[$opslag_id], $afd[$opslag_id], $projekt[$opslag_id], $ansat[$opslag_id], $valuta[$opslag_id], $forfaldsdato[$opslag_id], $betal_id[$opslag_id], $opslag_id);
 				}
@@ -1061,7 +1077,7 @@ if ($x == $antal - 1 && $kladde_id) { // only after last line
 			}
 			#if (strstr($submit,"Udlig")) {
 			if ($submit == 'offset') {
-				#print "<meta http-equiv='refresh' content='0;URL=../finans/autoudlign.php?kladde_id=$kladde_id'>";
+				print "<meta http-equiv='refresh' content='0;URL=../finans/autoudlign.php?kladde_id=$kladde_id'>";
 			}
 			if (strstr($submit, "DocuB")) {
 				print "<meta http-equiv='refresh' content='0;URL=../finans/docubizzimport.php?kladde_id=$kladde_id'>";
@@ -1127,15 +1143,11 @@ if (!$simuler) {
 	if ($returside == "kontospec.php") {
 		$backUrl = "kontospec.php";
 	} else {
-		$backUrl = "../finans/kladdeliste.php?exitDraft=$kladde_id";
+		$backUrl = "../finans/kladdeliste.php";
 	}
 	if ($returside != "regnskab") {
 		$returside = "../finans/kladdeliste.php";
 	}
-
-
-	
-
 
 	($udskriv) ? $height = '' : $height = 'height="100%"';
 	if ($udskriv) {
@@ -1151,9 +1163,9 @@ if (!$simuler) {
 
 			$tekst = findtekst('154|Dine ændringer er ikke blevet gemt! Tryk OK for at forlade siden uden at gemme.', $sprog_id);
 			print "<div id='header'>";
-			print "<div class='headerbtnLft headLink'><a href=\"javascript:confirmClose('../finans/kladdeliste.php?exitDraft=$kladde_id','$tekst')\" accesskey=L title='Klik her for at komme tilbage'><i class='fa fa-close fa-lg'></i> &nbsp;" . findtekst('30|Tilbage', $sprog_id) . "</a></div>";
+			print "<div class='headerbtnLft headLink'><a href=\"javascript:confirmClose('../finans/kladdeliste.php?exitDraft=$kladde_id&line=". __line__ .";','$tekst')\" accesskey=L title='Klik her for at komme tilbage'><i class='fa fa-close fa-lg'></i> &nbsp;" . findtekst('30|Tilbage', $sprog_id) . "</a></div>";
 			print "<div class='headerTxt'>$title &nbsp;•&nbsp; $kladde_id</div>";
-			print "<div class='headerbtnRght headLink'><a accesskey=N href=\"javascript:confirmClose('../finans/kassekladde.php?exitDraft=$kladde_id','$tekst')\"' title='TEXTHERE'><i class='fa fa-plus-square fa-lg'></i></a></div>";
+			print "<div class='headerbtnRght headLink'><a accesskey=N href=\"javascript:confirmClose('../finans/kassekladde.php?exitDraft=$kladde_id&line=". __line__ .";','$tekst')\"' title='TEXTHERE'><i class='fa fa-plus-square fa-lg'></i></a></div>";
 			print "</div>";
 			print "<div class='content-noside'>";
 
@@ -1166,12 +1178,12 @@ if (!$simuler) {
 			else print "<td $top_bund>";
 			$tekst = findtekst('154|Dine ændringer er ikke blevet gemt! Tryk OK for at forlade siden uden at gemme.', $sprog_id);
 			if ($popup || $visipop) {
-				print "<a href=\"javascript:confirmClose('../includes/luk.php?tabel=kladdeliste&amp;id=$kladde_id&exitDraft=$kladde_id','$tekst')\" accesskey='L'>" . findtekst('30|Tilbage', $sprog_id) . "</a></td>";
+				print "<a href=\"javascript:confirmClose('../includes/luk.php?tabel=kladdeliste&amp;id=$kladde_id&exitDraft=$kladde_id&line=". __line__ .";','$tekst')\" accesskey='L'>" . findtekst('30|Tilbage', $sprog_id) . "</a></td>";
 			} else {
-				print "<a href=\"javascript:confirmClose('../finans/kladdeliste.php?exitDraft=$kladde_id','$tekst')\" accesskey='L'>" . findtekst('30|Tilbage', $sprog_id) . "</a></td>";
+				print "<a href=\"javascript:confirmClose('../finans/kladdeliste.php?exitDraft=$kladde_id&line=". __line__ .";&line=". __line__ .";','$tekst')\" accesskey='L'>" . findtekst('30|Tilbage', $sprog_id) . "</a></td>";
 			}
 			print "<td width='80%' $top_bund> " . findtekst('1072|Kassekladde', $sprog_id) . "  $kladde_id</td>";
-			print "<td width='10%' $top_bund align='right'><a href=\"javascript:confirmClose('../finans/kassekladde.php?exitDraft=$kladde_id','$tekst')\" accesskey='N'>$ny</a></td></tr>";
+			print "<td width='10%' $top_bund align='right'><a href=\"javascript:confirmClose('../finans/kassekladde.php?exitDraft=$kladde_id&line=". __line__ .";&line=". __line__ .";','$tekst')\" accesskey='N'>$ny</a></td></tr>";
 			print "</tbody></table>"; # Tabel 1.1 <- Toplinje
 			print "</td></tr>\n";
 		}
@@ -1240,14 +1252,14 @@ $columns = array(
             $href = "../includes/documents.php?source=kassekladde&sourceId=$id&kladde_id=$kladde_id&bilag=$bilag&fokus=bila&openPool=1";
         }
         
-        $dragAttr = $hasDoc ? "draggable='true' ondragstart='clipDragStart(event, $id)'" : "";
-        $dropAttr = "ondragover='clipDragOver(event)' ondrop='clipDrop(event, $id)'";
+        $dragAttr = $hasDoc ? "draggable='true' ondragstart='clipDragStart(event, $id, \"" . htmlspecialchars($bilag) . "\")'" : "";
+        $dropAttr = "";
         $dropClass = $hasDoc ? "clip-has-doc" : "clip-no-doc";
         
         $txt = 'Obs - Du har ikke gemt.\n Hvis du klikker OK mistes de sidste ændringer';
-        return "<td class='clip-cell $dropClass' data-source-id='$id' $dropAttr title='$titletxt'>
-            <a href=\"javascript:confirmClose('$href','$txt')\" accesskey='L'>
-            <img src='../ikoner/$clip' style='width:20px;height:20px;cursor:" . ($hasDoc ? "grab" : "pointer") . ";' $dragAttr class='clip-icon' data-source-id='$id'></a>
+        return "<td class='clip-cell $dropClass' data-source-id='$id' data-bilag='" . htmlspecialchars($bilag) . "' $dropAttr title='$titletxt'>
+            <a href=\"javascript:confirmClose('$href','$txt')\" accesskey='L' $dragAttr>
+            <img src='../ikoner/$clip' style='width:20px;height:20px;cursor:" . ($hasDoc ? "grab" : "pointer") . ";' class='clip-icon' data-source-id='$id' data-bilag='" . htmlspecialchars($bilag) . "'></a>
         </td>";
     }
 ),
@@ -1622,43 +1634,316 @@ print '<style>
         padding: 8px 0;
         border-top: 1px solid #ccc;
     }
+
+    /* Border radius for buttons */
+    input[type="submit"],
+    input[type="button"],
+    button,
+    .button {
+        border-radius: 4px;
+    }
+
+    /* Print styles */
+    @media print {
+        /* Hide navigation and non-essential elements - including Saldi framework elements */
+        .sidebar,
+        .side-menu,
+        .left-menu,
+        #sidebar,
+        #side-menu,
+        #left-menu,
+        nav,
+        .nav,
+        .navigation,
+        .top-menu,
+        #top-menu,
+        .top-header,
+        .kassekladde-note-tb,
+        .table-con,
+        .header-row,
+        .kassekladde-footer,
+        #header,
+        .headerbtnLft,
+        .headerbtnRght,
+        .content-noside > div:first-child,
+        form input[type="submit"],
+        form input[type="button"],
+        .button,
+        a[href*="print"],
+        #questionmark,
+        footer,
+        .footer,
+        #footer,
+        .top_menu,
+        #top_menu,
+        .side_menu,
+        #side_menu,
+        .fixedFooter,
+        #footer-box,
+        /* Saldi framework specific elements */
+        .navbar,
+        .logobar,
+        .menuBar,
+        .dropdownMenu,
+        .dropDown,
+        .dropDownbtn,
+        .dropdownContent-Fin,
+        .dropdownContent-Kun,
+        .dropdownContent-Lev,
+        .dropdownContent-Lag,
+        .dropdownContent-Sys,
+        .dropdownContent-Bru,
+        .logo-link,
+        .logo-container,
+        .logo,
+        .logo-name,
+        .logoimg,
+        .leftmenuholder,
+        .leftmenu,
+        .leftmenuhead,
+        #leftmenuholder {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0 !important;
+            min-height: 0 !important;
+            max-height: 0 !important;
+            overflow: hidden !important;
+            width: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+        
+        /* Reset sticky and fixed positioning */
+        .kassekladde-thead {
+            position: static !important;
+            background-color: transparent !important;
+        }
+        
+        * {
+            position: static !important;
+            box-sizing: border-box !important;
+        }
+        
+        /* Critical fix for Chrome blank page issue */
+        html, body {
+            margin: 0 !important;
+            padding: 10px !important;
+            height: auto !important;
+            min-height: 0 !important;
+            max-height: none !important;
+            overflow: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+        
+        .content-noside {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+        }
+        
+        /* Reset Saldi content container margins - .content has margin-top: 70px for fixed nav */
+        .content {
+            margin: 0 !important;
+            margin-top: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+            min-width: 0 !important;
+        }
+        
+        /* Flex container reset */
+        .flex-container {
+            display: block !important;
+            min-width: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            justify-content: initial !important;
+        }
+        
+        /* Fix table height issues that cause blank pages */
+        table {
+            width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+            page-break-inside: auto;
+            border-collapse: collapse;
+        }
+        tr {
+            page-break-inside: avoid;
+            page-break-after: auto;
+            height: auto !important;
+        }
+        thead {
+            display: table-header-group;
+        }
+        td, th {
+            overflow: visible !important;
+            white-space: normal !important;
+            word-wrap: break-word !important;
+            text-overflow: clip !important;
+            padding: 4px 8px !important;
+            max-width: none !important;
+            height: auto !important;
+        }
+        
+        /* Critical fix for outerTable height=100% HTML attribute */
+        .outerTable,
+        .outerTable tbody,
+        .outerTable tr,
+        .outerTable td {
+            height: auto !important;
+            min-height: 0 !important;
+        }
+        
+        /* Reset any div with height: 100% */
+        div.vindue,
+        .print-view,
+        div {
+            height: auto !important;
+            min-height: 0 !important;
+        }
+        
+        /* Global table reset for print - remove all borders */
+        table, tr, td, th {
+            border: none !important;
+            border-collapse: collapse !important;
+        }
+
+        /* Ensure data table is visible and properly styled */
+        .dataTable, .dataTableForm, .outerTable, .formnavi, .print-view table {
+            display: table !important; /* Restore table display to prevent clipping */
+            border-collapse: collapse !important;
+            border: none !important;
+            height: auto !important;
+            min-height: 0 !important;
+            width: 100% !important;
+            font-size: 7pt !important; /* Further reduced font size to fit all 16 columns */
+            table-layout: auto !important; /* Allow browser to balance column widths */
+        }
+        
+        .dataTable td, .dataTableForm td, .outerTable td, .formnavi td, .print-view td,
+        .dataTable th, .dataTableForm th, .outerTable th, .formnavi th, .print-view th {
+            border: none !important;
+            border-bottom: 1px solid #eee !important;
+            background-color: transparent !important;
+            padding: 2px 1px !important; /* Minimal padding */
+            word-wrap: break-word !important;
+        }
+
+        /* Target the description/text column specifically to prevent it from being too wide */
+        .dataTable td:nth-child(3), .dataTableForm td:nth-child(3) {
+            max-width: 200px !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+        }
+
+        .dataTable th, .dataTableForm th, .outerTable th, .formnavi th, .print-view th {
+            background-color: #f2f2f2 !important;
+            font-weight: bold !important;
+            text-align: left !important;
+            border-bottom: 2px solid #ccc !important;
+            white-space: nowrap !important;
+        }
+
+        /* Zebra striping for rows */
+        .dataTable tbody tr:nth-child(even), 
+        .dataTableForm tbody tr:nth-child(even),
+        .formnavi tbody tr:nth-child(even),
+        .print-view tbody tr:nth-child(even),
+        tr.table-row:nth-child(even) {
+            background-color: #f2f2f2 !important;
+        }
+
+        /* Restore columns previously hidden */
+        .drag-handle, .clip-cell, .clip-icon {
+            display: table-cell !important; /* Restore visibility */
+            width: auto !important;
+            padding: 2px !important;
+        }
+
+        /* Remove input borders and backgrounds in print */
+        input.inputbox, select.inputbox, input[type="text"], input[type="checkbox"], input[type="button"], input[type="submit"] {
+            border: none !important;
+            background: transparent !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            box-shadow: none !important;
+            appearance: none !important;
+            -webkit-appearance: none !important;
+            color: black !important;
+            width: 100% !important; /* Allow inputs to fill cell width */
+            min-width: 0 !important;
+        }
+        
+        /* Ensure all content is visible */
+        .formnavi, .dataTableForm, .kassekladde-scroll-container, .print-view {
+            overflow: visible !important;
+            height: auto !important;
+            min-height: 0 !important;
+            display: block !important;
+            width: 100% !important;
+        }
+        
+        .kassekladde-scroll-container {
+            display: block !important;
+        }
+        
+        /* Hide top menu and navigation bars */
+        .logobar,
+        .navbar,
+        .menuBar,
+        .dropdownMenu,
+        .logo-bg,
+        .logo,
+        .logo-container,
+        .content-noside > .headLink,
+        .top-header-container {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0 !important;
+            min-height: 0 !important;
+        }
+        
+        /* Force override of HTML height attributes on tables */
+        table[height] {
+            height: auto !important;
+            min-height: 0 !important;
+        }
+        
+        /* Additional body reset */
+        body {
+            padding-bottom: 0 !important;
+            margin-bottom: 0 !important;
+        }
+        
+        /* Switch to landscape orientation to fit all columns */
+        @page {
+            size: landscape;
+            margin: 0.5cm;
+        }
+    }
 		
 </style>';
 //For grid print, use the customized grid print.
   print "<script>
-// Override print functionality to use grid PDF export
-document.addEventListener('DOMContentLoaded', function() {
-    // Store original print function
-    const originalPrint = window.print;
-    
-    // Override window.print
-    window.print = function() {
-        // Check if we're on the main datagrid view (not in column/filter edit mode)
-        const gridWrapper = document.querySelector('#datatable-wrapper-kass_$brugernavn');
-        
-        if (gridWrapper) {
-            // Trigger the grid's PDF export
-            handleActionkass_$brugernavn('exportPDF');
-        } else {
-            // Fall back to original print if grid not found
-            originalPrint.call(window);
-        }
-    };
-    
-    // Also handle Ctrl+P / Cmd+P keyboard shortcut
-    document.addEventListener('keydown', function(e) {
-        if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
-            e.preventDefault();
-            window.print();
-        }
-    });
-});
+// No override for window.print to allow native browser print dialog
 </script>";
 
 ##################
 
 if (!$udskriv) {
-	print "<form name='kassekladde' id='kassekladde' action='../finans/kassekladde.php?kksort=$kksort' method='post'>";
+$action_url = "../finans/kassekladde.php?kksort=$kksort";
+if ($kladde_id) {
+    $action_url .= "&kladde_id=$kladde_id";
+}
+if ($tjek) {
+    $action_url .= "&tjek=$tjek";
+}
+	print "<form name='kassekladde' id='kassekladde' action='$action_url' method='post'>";
 print "<input type='hidden' name='kladde_id' value='$kladde_id'>";
 print "<input type='hidden' name='kladdenote' value='$kladdenote'>";
 print "<tr><td width='100%' valign='top' height='1%' align='center' class='kassekladde-note-tb'>
@@ -1735,7 +2020,7 @@ SCRIPT;
 		// print "<tbody>"; # Tabel 1.3 -> kladdelinjer
 		// print "<tbody id='kassekladde-tbody'>"; # Tabel 1.3 -> kladdelinjer
 		print "<thead class='kassekladde-thead'>"; # Tabel 1.3 -> kladdelinjer
-
+		print "<tr class='table-krow'><td colspan='22' style='padding: 10px 0;'></td></tr>";
 		print "<tr>";
 		if ($vis_bilag && !$fejl && !$udskriv)
 			print "<td></td>";
@@ -1772,13 +2057,15 @@ SCRIPT;
 				print "<td align='center' width='30px'><b>".findtekst('1073|Saldo', $sprog_id)."<br>Bank</b></td>"; #<span title='".findtekst('1573|Afmærk her, hvis der ikke skal trækkes moms', $sprog_id)."'>
 			}
 		}
-		#print "<td align='right' width='30px'><b> <span title= 'Afm&aelig;rk her, hvis der ikke skal tr&aelig;kkes moms'>&nbsp;u/m</b></td>";
+		print "<td align='right' width='30px'><b> <span></b></td>";
+		print "<td align='right' width='30px'><b> <span></b></td>";
+		print "<td align='right' width='30px'><b> <span></b></td>";
+		#print "<td align='right' width='30px'><b> <span title= 'Afm&aelig;rk her, hvis der ikke skal tr&aelig;kkes moms'></b></td>";
 		print "</tr>\n";
 
 		print "</thead>";
 		print "<tbody id='kassekladde-tbody'>"; # Tabel 1.3 -> kladdelinjer
-		print "<tr class='table-row'><td colspan='7' style='padding: 20px 0;'></td></tr>";
-
+		
 
     }
 
@@ -2107,15 +2394,15 @@ if (($bogfort && $bogfort != '-') || $udskriv) {
 				$href = "../includes/documents.php?source=kassekladde&sourceId=$id[$y]&kladde_id=$kladde_id&bilag=$bilag[$y]&fokus=bila$y&openPool=1";
 			}
 			// Drag-and-drop attributes for linking documents between lines
-			$dragAttr = $hasDoc ? "draggable='true' ondragstart='clipDragStart(event, $id[$y])'" : "";
-			$dropAttr = "ondragover='clipDragOver(event)' ondrop='clipDrop(event, $id[$y])'";
+			$dragAttr = $hasDoc ? "draggable='true' ondragstart='clipDragStart(event, $id[$y], \"" . htmlspecialchars($bilag[$y]) . "\")'" : "";
+$dropAttr = "";
 			$dropClass = $hasDoc ? "clip-has-doc" : "clip-no-doc";
 			
-			print "<td class='clip-cell $dropClass' data-source-id='$id[$y]' $dropAttr title='$titletxt'><!-- ". __line__ ." -->	";
+			print "<td class='clip-cell $dropClass' data-source-id='$id[$y]' data-bilag='" . htmlspecialchars($bilag[$y]) . "' $dropAttr title='$titletxt'><!-- ". __line__ ." -->	";
 			$txt = 'Obs - Du har ikke gemt.\n Hvis du klikker OK mistes de sidste ændringer';
-			print "<a href=\"javascript:confirmClose('$href','$txt')\" accesskey='L'>";
+			print "<a href=\"javascript:confirmClose('$href','$txt')\" accesskey='L' $dragAttr>";
 #			print "<a href='../includes/documents.php?source=kassekladde&&ny=ja&sourceId=$id[$y]&kladde_id=$kladde_id&bilag=$bilag[$y]&bilag_id=$id[$y]&fokus=bila$y'>";
-			print "<img src='../ikoner/$clip' style='width:20px;height:20px;cursor:" . ($hasDoc ? "grab" : "pointer") . ";' $dragAttr class='clip-icon' data-source-id='$id[$y]'></a></td>\n";
+			print "<img src='../ikoner/$clip' style='width:20px;height:20px;cursor:" . ($hasDoc ? "grab" : "pointer") . ";' class='clip-icon' data-source-id='$id[$y]' data-bilag='" . htmlspecialchars($bilag[$y]) . "'></a></td>\n";
 		}
 		if (!isset($dub_bilag[$y]))
 			$dub_bilag[$y] = 0;
@@ -2197,8 +2484,35 @@ if (($bogfort && $bogfort != '-') || $udskriv) {
 			print "<td align='center'><input class='inputbox' type=checkbox name=moms$y onchange='javascript:docChange = true;'></td>\n";
 		}
 
+		#######
 		print "<td class='drag-handle' style='cursor:move;'>&#x2630; " . (isset($pos[$y]) ? $pos[$y] : '') . "</td>";
-    	print "</td>\n";
+
+		// Add Plus and Delete buttons
+		print "<td style='text-align:center; white-space:nowrap;'>";
+
+		// Plus button - always enabled
+		print "<td style='text-align:center; white-space:nowrap;'>";
+
+		$plusTitle = "Duplicate this line";  
+		print "<button type='button' class='duplicate-line-btn' data-row='$y' data-id='$id[$y]' title='$plusTitle'>+</button>";
+
+		// Delete button - disabled if document attached
+		$qtxt = "SELECT id FROM documents WHERE source = 'kassekladde' AND source_id = '$id[$y]'";
+		$hasDoc = ($dokument[$y] || db_fetch_array(db_select($qtxt, __FILE__ . " line " . __LINE__)));
+
+		if ($hasDoc) {
+			$deleteTitle = "Remove attached document first";  
+			$deleteDisabled = "disabled";
+		} else {
+			$deleteTitle = "Delete this line";  
+			$deleteDisabled = "";
+		}
+
+		print "<button type='button' class='delete-line-btn' data-row='$y' data-id='$id[$y]' title='$deleteTitle' $deleteDisabled>x</button>";
+
+		print "</td>\n";
+
+		######
 
 		if ($control_bal_fetched) {
 			$titletxt = findtekst("Kontrolsaldo er nu beregnet fra ", $sprog_id); # "The control balance is calculated from "
@@ -2282,6 +2596,8 @@ if (($bogfort && $bogfort != '-') || $udskriv) {
 		if (!$debet[$tmp] && !$kredit[$tmp])
 			$fokus = nextfokus($fokus);
 	}
+	print "</tr>\n";
+	
 	if (!isset($dato[$y]))         $dato[$y]        = NULL;
 	if (!isset($beskrivelse[$y]))  $beskrivelse[$y] = NULL;
 	if (!isset($debet[$y]))        $debet[$y]       = NULL;
@@ -2476,6 +2792,7 @@ if (($bogfort && $bogfort != '-') || $udskriv) {
 				print "<td><input  class='inputbox' style='text-align:left;width:100px;' readonly='readonly'></td>\n";
 		}
 		print "<td align='center'><input class='inputbox' type='checkbox' name='moms$z' onchange='javascript:docChange = true;'></td>\n";
+		
 		print "</tr>\n";
 	}
 	#	if (count($bilag)<10) print "<tr><td align='center' colspan='8'>".findtekst('598|-', $sprog_id)."</td></tr>";
@@ -2522,8 +2839,37 @@ if (($bogfort && $bogfort != '-') || $udskriv) {
 			print "</form>";
 
 		} elseif ($bogfort == 'S') {
-			print "<tr><td colspan=9 align='center'><input type='submit' class='button rosy medium' accesskey='a' value='" . findtekst('1090|Annuller simulering', $sprog_id) . "' name='cancelSimulation' onclick='javascript:docChange = false;'></td></tr>\n";
-			print "</form>";
+
+		print "<form method='post' action='kassekladde.php?kladde_id=$kladde_id&tjek=$kladde_id'>";
+print "<input type='hidden' name='kladde_id' value='$kladde_id'>";
+
+print "
+<tr style='position: relative;'>
+  <td colspan='9'
+      style='
+        position: absolute;
+        bottom: 40px;
+        left: 50%;
+        transform: translateX(-50%);
+        text-align: center;
+      '>
+    <input
+      type='submit'
+      class='button rosy medium'
+      accesskey='a'
+      value='" . findtekst('1090|Annuller simulering', $sprog_id) . "'
+      name='cancelSimulation'
+      onclick='docChange = false;'
+    >
+  </td>
+</tr>
+";
+
+print "</form>";
+			// print "<form method='post' action='kassekladde.php?kladde_id=$kladde_id&tjek=$kladde_id'>";
+			// print "<input type='hidden' name='kladde_id' value='$kladde_id'>";
+			// print "<tr><td colspan=9 align='center'><input type='submit' class='button rosy medium' accesskey='a' value='" . findtekst('1090|Annuller simulering', $sprog_id) . "' name='cancelSimulation' onclick='javascript:docChange = false;'></td></tr>\n";
+			// print "</form>";
 		} else {
 			print "<td align='center'><span title='" . findtekst('1544|Klik her for at gemme', $sprog_id) . "'><input type='submit' class='button green medium' style='width:120px;' accesskey='g' value='" . findtekst('3|Gem', $sprog_id) . "' name='save' onclick='javascript:docChange = false;'></span></td>\n";
 			print "<td align='center'><span title='" . findtekst('1545|Opslag - din markørs placering angiver hvilken tabel, opslag foretages i', $sprog_id) . "'><input type='submit' class='button blue medium' style='width:120px;' accesskey='o' value='" . findtekst('644|Opslag', $sprog_id) . "' name='lookup' onclick='javascript:docChange = false;'></span></td>";
@@ -3353,15 +3699,17 @@ if ($page_display) {
 
 
 if($page_display){ #20251213
-		print "
-
-
+		
+?>
 
 
 <script>
-
 document.addEventListener('DOMContentLoaded', function() {
-    // Get all rows and their buttons by the respective IDs
+    // PHP-injected variables
+    const tjek = <?php echo isset($tjek) ? json_encode($tjek) : '""'; ?>;
+    const kladde_id = <?php echo isset($kladde_id) ? json_encode($kladde_id) : '""'; ?>;
+
+    // All action buttons
     const buttonRows = [
         { rowId: 'kopierButtonRow', buttonId: 'kopier-button', name: 'copy2new' },
         { rowId: '', buttonId: 'revert-button', name: 'revert' },
@@ -3376,7 +3724,6 @@ document.addEventListener('DOMContentLoaded', function() {
         { rowId: '', buttonId: 'offset-button', name: 'offset' }
     ];
 
-    const footerBox = document.querySelector('.fixedFooter #footer-box');
     const actionButtonsCenter = document.querySelector('.fixedFooter .action-buttons-center');
 
     buttonRows.forEach(({ rowId, buttonId, name }) => {
@@ -3385,44 +3732,52 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (button && actionButtonsCenter) {
             // Hide the original row (if it exists)
-            if (buttonRow) {
-                buttonRow.style.display = 'none';
-            }
+            if (buttonRow) buttonRow.style.display = 'none';
 
-            // Clone the button to keep its functionality intact
+            // Clone the button
             const clonedButton = button.cloneNode(true);
             clonedButton.name = name;
-
-            // Append the cloned button to the center container
             actionButtonsCenter.appendChild(clonedButton);
 
-            // Attach a click listener to manually submit the form
+            // Attach click listener
             clonedButton.addEventListener('click', function(event) {
                 const form = document.getElementById('kassekladde');
+                if (!form) return;
 
-                if (form) {
-                    const hiddenInput = document.createElement('input');
-                    hiddenInput.type = 'hidden';
-                    hiddenInput.name = clonedButton.name;
-                    hiddenInput.value = clonedButton.value || '';
+                // Add the button action itself as hidden
+                const hiddenButtonInput = document.createElement('input');
+                hiddenButtonInput.type = 'hidden';
+                hiddenButtonInput.name = clonedButton.name;
+                hiddenButtonInput.value = clonedButton.value || '';
+                form.appendChild(hiddenButtonInput);
 
-                    form.appendChild(hiddenInput);
-
-                    const formData = new FormData(form);
-                    formData.forEach((value, key) => {
-                      
-                    });
-
-                
-                    form.submit();
+                // Add PHP variables tjek and kladde_id as hidden fields
+                if (tjek) {
+                    const tjekInput = document.createElement('input');
+                    tjekInput.type = 'hidden';
+                    tjekInput.name = 'tjek';
+                    tjekInput.value = tjek;
+                    form.appendChild(tjekInput);
                 }
+
+                if (kladde_id) {
+                    const kladdeInput = document.createElement('input');
+                    kladdeInput.type = 'hidden';
+                    kladdeInput.name = 'kladde_id';
+                    kladdeInput.value = kladde_id;
+                    form.appendChild(kladdeInput);
+                }
+
+                // Submit the form
+                form.submit();
             });
         }
     });
 });
 </script>
-";
-	}
+
+<?php
+}
 
 
 
@@ -3478,6 +3833,38 @@ document.addEventListener('DOMContentLoaded', function() {
 		}
 
 
+.duplicate-line-btn,
+.delete-line-btn {
+    border: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    font-size: 12px;          /* adjust for the smaller circle */
+    line-height: 18px;        /* centers the symbol vertically */
+    text-align: center;
+    cursor: pointer;
+    padding: 0;
+    margin-left: 5px;
+}
+
+/* Plus button styling */
+.duplicate-line-btn {
+    background-color: #4CAF50;
+    color: white;
+}
+
+/* Delete button styling */
+.delete-line-btn {
+    background-color: #f44336;
+    color: white;
+}
+
+/* Disabled delete button */
+.delete-line-btn:disabled {
+    background-color: #ccc;
+    color: white;
+    cursor: not-allowed;
+}
 
 </style>
 
@@ -3608,6 +3995,92 @@ window.addEventListener('DOMContentLoaded', function() {
   
 
 });
+
+// Duplicate line functionality
+
+document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('duplicate-line-btn') || e.target.closest('.duplicate-line-btn')) {
+        const button = e.target.classList.contains('duplicate-line-btn') ? e.target : e.target.closest('.duplicate-line-btn');
+        const sourceId = button.getAttribute('data-id');
+        const kladdeId = document.querySelector('[name="kladde_id"]').value;
+        
+        if (!sourceId) {
+            alert('No source_id found for this line');
+            return;
+        }
+        
+        console.log('Duplicating line with source_id:', sourceId, 'kladde_id:', kladdeId);
+        
+        // Create FormData to send via AJAX
+        const formData = new FormData();
+        formData.append('action', 'duplicate_line');
+        formData.append('kladde_id', kladdeId);
+        formData.append('source_id', sourceId);
+        
+        // Show loading indicator
+        const originalHTML = button.innerHTML;
+        button.disabled = true;
+        button.innerHTML = '⏳';
+        
+        // Send AJAX request to kassekladde.php itself
+        fetch('kassekladde.php', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            return response.text();
+        })
+        .then(text => {
+            // Try to parse as JSON
+            try {
+                const data = JSON.parse(text);
+                if (data.success) {
+                    // Reload the page to show the duplicated line
+                    window.location.reload();
+                } else {
+                    alert('Fejl: ' + (data.message || 'Ukendt fejl'));
+                    button.disabled = false;
+                    button.innerHTML = originalHTML;
+                }
+            } catch (e) {
+                
+                if (text.includes('<html') || text.includes('<!DOCTYPE')) {
+					 window.location.reload();
+                } else if (text.includes('Fatal error') || text.includes('Warning') || text.includes('Notice')) {
+                    alert('PHP error detected: ' + text.substring(0, 200));
+                } else {
+                    alert('Invalid response from server: ' + text.substring(0, 200));
+                }
+                
+                button.disabled = false;
+                button.innerHTML = originalHTML;
+            }
+        })
+        .catch(error => {
+            console.error('Network error:', error);
+            alert('Network error: ' + error.message);
+            button.disabled = false;
+            button.innerHTML = originalHTML;
+        });
+    }
+});
+// Delete line functionality
+document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('delete-line-btn') && !e.target.disabled) {
+        const row = e.target.getAttribute('data-row');
+        const bilagField = document.querySelector(`[name="bila${row}"]`);
+        
+        if (confirm('Are you sure you want to delete this line?')) {
+            // Set bilag to '-' to mark for deletion
+            bilagField.value = '-';
+            
+            // Submit the form
+            document.getElementById('kassekladde').submit();
+        }
+    }
+});
+
+
 </script>
 
 
@@ -3757,12 +4230,12 @@ print "
 <style>
 /* Clip drag and drop styles */
 .clip-cell {
-	transition: all 0.2s ease;
+	/* transition: all 0.2s ease; Removed to prevent drag flicker */
 }
 .clip-cell.drag-over {
 	background-color: #d4edda !important;
 	box-shadow: inset 0 0 8px rgba(40, 167, 69, 0.5);
-	transform: scale(1.1);
+	/* transform: scale(1.1); Removed to prevent drag flicker */
 }
 .clip-cell.drag-over-invalid {
 	background-color: #f8d7da !important;
@@ -3781,14 +4254,29 @@ print "
 <script>
 // Clip drag and drop for linking documents between kassekladde lines
 let clipDragSourceId = null;
+let clipDragSourceBilag = null;
 
-function clipDragStart(event, sourceId) {
+function clipDragStart(event, sourceId, sourceBilag) {
+	console.log('clipDragStart called - sourceId:', sourceId, 'sourceBilag:', sourceBilag);
 	clipDragSourceId = sourceId;
-	event.dataTransfer.setData('text/plain', sourceId);
+	clipDragSourceBilag = sourceBilag;
+	
+	// Use JSON in text/plain for reliability across platforms
+	const dragData = JSON.stringify({
+		sourceId: sourceId,
+		sourceBilag: sourceBilag
+	});
+	console.log('clipDragStart - setting dragData:', dragData);
+	event.dataTransfer.setData('text/plain', dragData);
+	
+	// Keep text/bilag just in case, but text/plain JSON is primary
+	event.dataTransfer.setData('text/bilag', sourceBilag);
 	event.dataTransfer.effectAllowed = 'link';
+	console.log('clipDragStart - dataTransfer set. text/plain:', event.dataTransfer.getData('text/plain'), 'text/bilag:', event.dataTransfer.getData('text/bilag'));
 	
 	// Add visual feedback
 	event.target.classList.add('dragging');
+	console.log('clipDragStart - added dragging class to:', event.target);
 	
 	// Add drag image
 	const dragImage = event.target.cloneNode(true);
@@ -3807,6 +4295,8 @@ function clipDragOver(event) {
 	const cell = event.target.closest('.clip-cell');
 	if (cell) {
 		const targetId = cell.dataset.sourceId;
+		const targetBilag = cell.dataset.bilag;
+		console.log('clipDragOver - targetId:', targetId, 'targetBilag:', targetBilag, 'sourceId:', clipDragSourceId);
 		// Don't allow dropping on itself
 		if (targetId == clipDragSourceId) {
 			cell.classList.add('drag-over-invalid');
@@ -3821,11 +4311,17 @@ function clipDragOver(event) {
 function clipDragLeave(event) {
 	const cell = event.target.closest('.clip-cell');
 	if (cell) {
+		// Prevent firing when moving to a child element
+		if (event.relatedTarget && cell.contains(event.relatedTarget)) {
+			return;
+		}
+		console.log('clipDragLeave - leaving cell:', cell.dataset.sourceId);
 		cell.classList.remove('drag-over', 'drag-over-invalid');
 	}
 }
 
-function clipDrop(event, targetSourceId) {
+function clipDrop(event, targetSourceId, targetBilag) {
+	console.log('clipDrop called - targetSourceId:', targetSourceId, 'targetBilag:', targetBilag);
 	event.preventDefault();
 	
 	const cell = event.target.closest('.clip-cell');
@@ -3833,18 +4329,59 @@ function clipDrop(event, targetSourceId) {
 		cell.classList.remove('drag-over', 'drag-over-invalid');
 	}
 	
-	const sourceId = event.dataTransfer.getData('text/plain') || clipDragSourceId;
+	let sourceId = null;
+	let sourceBilag = null;
+	
+	// Try parsing JSON from text/plain
+	try {
+		const rawData = event.dataTransfer.getData('text/plain');
+		console.log('clipDrop - rawData from text/plain:', rawData);
+		
+		if (rawData && rawData.startsWith('{')) {
+			const data = JSON.parse(rawData);
+			console.log('clipDrop - parsed JSON:', data);
+			sourceId = data.sourceId;
+			sourceBilag = data.sourceBilag;
+		} else {
+			// Fallback for simple ID if needed
+			console.log('clipDrop - rawData is not JSON, treating as ID');
+			sourceId = rawData;
+		}
+	} catch (e) {
+		console.error('Drag drop parse error', e);
+		sourceId = event.dataTransfer.getData('text/plain');
+	}
+
+	// Fallback to globals or text/bilag
+	if (!sourceBilag) {
+		console.log('clipDrop - sourceBilag missing, checking text/bilag');
+		sourceBilag = event.dataTransfer.getData('text/bilag');
+	}
+	if (!sourceId) { 
+		console.log('clipDrop - sourceId missing, using global fallback:', clipDragSourceId);
+		sourceId = clipDragSourceId;
+	}
+	if (!sourceBilag) {
+		console.log('clipDrop - sourceBilag missing, using global fallback:', clipDragSourceBilag);
+		sourceBilag = clipDragSourceBilag;
+	}
+	
+	console.log('clipDrop FINAL - sourceId:', sourceId, 'sourceBilag:', sourceBilag);
 	
 	// Don't link to itself
 	if (sourceId == targetSourceId) {
+		console.log('clipDrop - cannot link to itself, returning');
 		return;
 	}
 	
-	// Confirm the action
-	if (!confirm('Link bilag fra linje ' + sourceId + ' til linje ' + targetSourceId + '?')) {
+	// Confirm the action - show bilag numbers instead of line IDs
+	console.log('clipDrop - showing confirm dialog for bilag', sourceBilag, 'to', targetBilag);
+	if (!confirm('Link bilag fra bilag ' + sourceBilag + ' til bilag ' + targetBilag + '?')) {
+		console.log('clipDrop - user cancelled');
 		return;
 	}
 	
+	console.log('clipDrop - user confirmed, calling linkDocumentsBetweenLines');
 	// Make AJAX call to link documents
 	linkDocumentsBetweenLines(sourceId, targetSourceId);
 }
@@ -3886,13 +4423,46 @@ document.addEventListener('dragend', function(event) {
 	document.querySelectorAll('.clip-cell').forEach(cell => {
 		cell.classList.remove('drag-over', 'drag-over-invalid');
 	});
-	clipDragSourceId = null;
+	
+	// Delay cleanup to ensure drop handler has time to read the values
+	setTimeout(() => {
+		clipDragSourceId = null;
+		clipDragSourceBilag = null;
+	}, 100);
 });
 
-// Add dragleave handler to cells
+// Setup drag and drop event listeners programmatically (works better in Chrome than inline handlers)
 document.addEventListener('DOMContentLoaded', function() {
-	document.querySelectorAll('.clip-cell').forEach(cell => {
-		cell.addEventListener('dragleave', clipDragLeave);
+	// Use event delegation for better performance with dynamic content
+	document.addEventListener('dragover', function(e) {
+		const cell = e.target.closest('.clip-cell');
+		if (cell) {
+			e.preventDefault(); // MUST be here for drop to work in Chrome
+			e.stopPropagation();
+			clipDragOver(e);
+		}
+	});
+	
+	document.addEventListener('drop', function(e) {
+		console.log('DROP EVENT CAPTURED at document level - target:', e.target);
+		const cell = e.target.closest('.clip-cell');
+		console.log('DROP - closest clip-cell:', cell);
+		if (cell) {
+			const targetId = cell.dataset.sourceId;
+			const targetBilag = cell.dataset.bilag;
+			console.log('DROP - calling clipDrop with targetId:', targetId, 'targetBilag:', targetBilag);
+			clipDrop(e, targetId, targetBilag);
+		} else {
+			console.log('DROP - no clip-cell found, preventing default anyway');
+			e.preventDefault();
+		}
+	});
+	
+	document.addEventListener('dragleave', function(e) {
+		const cell = e.target.closest('.clip-cell');
+		if (cell) {
+			clipDragLeave(e);
+		}
 	});
 	
 	// Initialize account autocomplete after page is fully loaded
@@ -3910,8 +4480,6 @@ document.addEventListener('DOMContentLoaded', function() {
 ";
 
 	?>
-
-
 
 
 

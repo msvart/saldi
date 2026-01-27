@@ -1,6 +1,11 @@
 <?php
-// --- finans/kladdeliste.php -------- patch 4.1.1 --- 2026.01.12 --- 
-//                           LICENSE
+//                ___   _   _   ___  _     ___  _ _
+//               / __| / \ | | |   \| |   |   \| / /
+//               \__ \/ _ \| |_| |) | | _ | |) |  <
+//               |___/_/ \_|___|___/|_||_||___/|_\_\
+//
+// --- finans/kladdeliste.php --- patch 5.0.0 --- 2026.01.26 --- 
+// LICENSE
 //
 // This program is free software. You can redistribute it and / or
 // modify it under the terms of the GNU General Public License (GPL)
@@ -15,7 +20,7 @@
 // but WITHOUT ANY KIND OF CLAIM OR WARRANTY. 
 // See GNU General Public License for more details.
 // http://www.saldi.dk/dok/GNU_GPL_v2.html
-// Copyright (c) 2003-2025 Saldi.dk ApS
+// Copyright (c) 2003-2026 Saldi.dk ApS
 // -----------------------------------------------------------------------------------
 // 20150722 PHR Vis alle/egne gemmes nu som cookie. 
 // 20181220 MSC - Rettet ny kladde knap til Ny
@@ -28,6 +33,7 @@
 // 12/02/2025 PBLM - Added a new button to open the digital approver
 // 16/05/2025 make sure the back button redirect too the previous page rather than going back to the dashboard
 // 20251021 LOE Added pagination and static header and footer
+// 20260126 PHR fixed $exitDraft
 
 @session_start();
 $s_id=session_id();
@@ -192,6 +198,11 @@ print "<script LANGUAGE=\"JavaScript\" SRC=\"../javascript/moment.min.js\"></scr
 print "<script LANGUAGE=\"JavaScript\" SRC=\"../javascript/daterangepicker.min.js\" defer></script>";
 print '<link rel="stylesheet" type="text/css" href="../css/daterangepicker.css" />';
 
+$exitDraft = if_isset($_GET['exitDraft']);
+if ($exitDraft) {
+	$qtxt = "update kladdeliste set hvem = '', tidspkt = NULL where id = '$exitDraft'";
+	db_modify($qtxt, __FILE__ . " linje " . __LINE__);
+}
 
 if (strpos(findtekst('639|Kladdeliste', $sprog_id),'undtrykke')) {
 	$qtxt = "update tekster set tekst = '' where tekst_id >= '600'";
@@ -253,11 +264,13 @@ $columns[] = array(
         if ($locked) {
             global $sprog_id;
             $url = "kassekladde.php?tjek=$id&kladde_id=$id&returside=kladdeliste.php";
-            return "<td align='{$column['align']}' onclick=\"window.location.href='$url'\" style='cursor:pointer'><a href='$url' title='" . findtekst('1607|Kladde er låst af', $sprog_id) . " {$row['hvem']}' style='color:#FF0000'>$value</a></td>";
+            $bogfort = isset($row['bogfort']) ? htmlspecialchars($row['bogfort']) : '';
+            return "<td align='{$column['align']}' data-bogfort='$bogfort' onclick=\"window.location.href='$url'\" style='cursor:pointer'><a href='$url' title='" . findtekst('1607|Kladde er låst af', $sprog_id) . " {$row['hvem']}' style='color:#FF0000'>$value</a></td>";
         }
         
         $url = "kassekladde.php?tjek=$id&kladde_id=$id&returside=kladdeliste.php";
-        return "<td align='{$column['align']}' onclick=\"window.location.href='$url'\" style='cursor:pointer'><a href='$url'>$value</a></td>";
+        $bogfort = isset($row['bogfort']) ? htmlspecialchars($row['bogfort']) : '';
+        return "<td align='{$column['align']}' data-bogfort='$bogfort' onclick=\"window.location.href='$url'\" style='cursor:pointer'><a href='$url'>$value</a></td>";
     },
 );
 
@@ -535,10 +548,11 @@ SELECT
     k.hvem,
     -- Count entries in kassekladde to determine if journal is empty
     (SELECT COUNT(*) FROM kassekladde kk WHERE kk.kladde_id = k.id) as entry_count,
-    -- Sort order: non-posted first (- and !), then posted (S, V, etc)
+    -- Sort order: non-posted first (- and !), then simulated (S), then posted (V, etc)
     CASE 
         WHEN k.bogfort IN ('-', '!') THEN 0
-        ELSE 1
+        WHEN k.bogfort = 'S' THEN 1
+        ELSE 2
     END as sort_group
 FROM kladdeliste k
 WHERE $sqlWhere AND {{WHERE}}
@@ -642,33 +656,43 @@ document.addEventListener('DOMContentLoaded', function() {
     initDatepicker(bogfortInput);
 
     setTimeout(function() {
-        // Find the first posted draft row and add a separator before it
-        let foundSeparator = false;
+        // Find simulated and posted draft rows and add separators before them
+        let foundSimulatedSeparator = false;
+        let foundPostedSeparator = false;
         const rows = document.querySelectorAll('#datatable-kladdelst tbody tr');
         
         rows.forEach(function(row, index) {
             const cells = row.querySelectorAll('td');
             
-            if (cells.length >= 7 && !foundSeparator) {
-                // Check the 'Posted' column (5th column - index 4)
-                const postedCell = cells[4];
-                const postedText = postedCell.textContent.trim();
+            if (cells.length >= 7) {
+                // Get bogfort value from data attribute on first cell (ID column)
+                const firstCell = cells[0];
+                const bogfort = firstCell.getAttribute('data-bogfort');
                 
-                // If this row has a posted date (not '-' or '!')
-                // Check for date patterns: Danish dates like \"09-10-2017\" or \"02-05-2019\"
-                const isPosted = postedText && 
-                                postedText !== '-' && 
-                                postedText !== '!' && 
-                                postedText !== '' &&
-                                /\d{2}[-\/]\d{2}[-\/]\d{4}/.test(postedText);
-                
-                if (isPosted) {
-                    foundSeparator = true;
+                // Simulated entries have bogfort = 'S'
+                if (bogfort === 'S' && !foundSimulatedSeparator) {
+                    foundSimulatedSeparator = true;
                     
-                    // Create separator row with translated text
+                    // Create separator row for simulated drafts
+                    const separatorRow = document.createElement('tr');
+                    separatorRow.style.backgroundColor = '#fff8e1';
+                    separatorRow.style.fontWeight = 'bold';
+                    separatorRow.className = 'simulated-separator';
+                    separatorRow.innerHTML = '<td colspan=\"2\" style=\"text-align: center; font-weight: bold; padding: 12px; background-color: #fff8e1;\">".findtekst('1085|Simuleret', $sprog_id)." ".findtekst('639|Kladdeliste', $sprog_id)."</td><td colspan=\"5\" style=\"background-color: #fff8e1; padding: 12px;\"><hr style=\"margin: 0; border: 0; border-top: 2px solid #f9a825;\"></td>';
+                    
+                    // Insert before this row
+                    row.parentNode.insertBefore(separatorRow, row);
+                }
+                
+                // Posted entries have bogfort = 'V' or other letters (not '-', '!', or 'S')
+                if (bogfort && bogfort !== '-' && bogfort !== '!' && bogfort !== 'S' && !foundPostedSeparator) {
+                    foundPostedSeparator = true;
+                    
+                    // Create separator row for posted drafts
                     const separatorRow = document.createElement('tr');
                     separatorRow.style.backgroundColor = '#f0f0f0';
                     separatorRow.style.fontWeight = 'bold';
+                    separatorRow.className = 'posted-separator';
                     separatorRow.innerHTML = '<td colspan=\"2\" style=\"text-align: center; font-weight: bold; padding: 12px; background-color: #f0f0f0;\">".findtekst('1093|Bogførte kladder', $sprog_id)."</td><td colspan=\"5\" style=\"background-color: #f0f0f0; padding: 12px;\"><hr style=\"margin: 0; border: 0; border-top: 2px solid rgb(84, 99, 84);\"></td>';
                     
                     // Insert before this row
@@ -838,7 +862,7 @@ document.addEventListener('DOMContentLoaded', function() {
         toggleBtn.type = 'button';
         toggleBtn.id = 'filter-toggle-btn'; 
         toggleBtn.style.cssText =
-            'padding:4px 8px; border:1px solid #999; height:22px; color:white; cursor:pointer; font-size:12px;';
+            'padding:4px 8px; border:1px solid #999; border-radius:4px; height:22px; color:white; cursor:pointer; font-size:12px;';
 
        
         var sidebar = window.parent.document.querySelector('.sidebar');

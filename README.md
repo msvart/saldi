@@ -59,7 +59,7 @@ mv .env.example .env
 3. Edit `.env` with your settings:
 
 ```env
-SALDI_DOCKER=1          # Required - enables Docker mode
+GENERATE_CONNECT_PHP=1  # Auto-generate connect.php (set 0 for manual)
 SALDI_PORT=8080         # Port mapping (default 8080)
 DB_TYPE=postgresql      # postgresql or mysqli
 DB_HOST=db              # Use 'db' for bundled database, or your database hostname

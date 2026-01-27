@@ -120,6 +120,8 @@
 // 20250630 PHR Minor change in transtjek
 // 20250811 PHR Another minor change in transtjek
 // 20251106 LOE Added z-index to tekstboks function
+// 20260127 Saul - - fixed.  Asking if you want to edit this 'text' if its new item.
+
 include('stdFunc/dkDecimal.php');
 include('stdFunc/nrCast.php');
 include('stdFunc/strStartsWith.php');
@@ -1858,7 +1860,7 @@ if (!function_exists('sync_shop_vare')) {
 		#if ($partOfItem) echo __line__." Id $vare_id is part of another item<br>";  	
 		$qtxt = "select box8 from grupper where kodenr='$itemGroup' and art = 'VG' AND fiscal_year = $regnaar";
 		fwrite($log, __FILE__ . " " . __LINE__ . " $qtxt\n");
-		echo $qtxt;
+		// echo $qtxt;  // Debug line removed
 		$r = db_fetch_array(db_select($qtxt, __FILE__ . " linje " . __LINE__));
 		if (!$r['box8']) {
 			fwrite($log, __FILE__ . " " . __LINE__ . " no stock\n");
@@ -1903,7 +1905,7 @@ if (!function_exists('sync_shop_vare')) {
 		} else {
 			$qtxt = "select varer.varenr, varer.varenr_alias, varer.kostpris, varer.salgspris, varer.m_type, varer.m_rabat, lagerstatus.beholdning as stock from lagerstatus,varer ";
 			$qtxt .= "where lagerstatus.vare_id='$vare_id' and lagerstatus.lager='$lager' and varer.id='$vare_id'";
-			echo $qtxt;
+			// echo $qtxt;  // Debug line removed
 			if ($r = db_fetch_array(db_select($qtxt, __FILE__ . " linje " . __LINE__))) {
 				$stock = $r['stock'];
 				$itemNo = $r['varenr'];
@@ -2175,19 +2177,19 @@ if (!function_exists('get_next_number')) {
 	}
 }
 
-//                   ----------------------------- get_next_order_number ------------------------------
 if (!function_exists('get_next_order_number')) {
 	function get_next_order_number($art = 'DO')
 	{
 		/**
 		 * Generates the next available order number (ordrenr) for a given 'art' (type).
-		 * Uses database transactions and locking to prevent race conditions and duplicate numbers.
+		 * Uses database transactions and table locking to prevent race conditions and duplicate numbers.
 		 * 
 		 * @param string $art - The order type ('DO', 'DK', 'KO', 'KK', 'PO', etc.)
 		 * 
 		 * @return int - The next available order number.
 		 * @throws Exception - If unable to generate unique order number after maximum attempts.
 		 */
+		global $db_type;
 		
 		$max_attempts = 10;
 		$attempt = 0;
@@ -2200,24 +2202,27 @@ if (!function_exists('get_next_order_number')) {
 			while ($attempt < $max_attempts) {
 				$attempt++;
 				
-				// Lock the ordrer table to prevent concurrent access
+				// Use SELECT FOR UPDATE to lock relevant rows - works on both PostgreSQL and MySQL
+				// This locks the rows being read until the transaction is committed
+				// Use LOCK TABLE to ensure uniqueness and prevent race conditions
+				// FOR UPDATE with aggregate functions is not allowed in PostgreSQL
 				db_modify("LOCK TABLE ordrer IN EXCLUSIVE MODE", __FILE__ . " linje " . __LINE__);
 				
-				// Get the maximum order number for the given art type
 				$qtxt = "SELECT COALESCE(MAX(ordrenr), 0) as max_ordrenr FROM ordrer WHERE art = '$art'";
 				$r = db_fetch_array(db_select($qtxt, __FILE__ . " linje " . __LINE__));
-				$ordrenr = ($r['max_ordrenr'] ? $r['max_ordrenr'] : 0) + 1;
+				$ordrenr = ($r['max_ordrenr'] ? (int)$r['max_ordrenr'] : 0) + 1;
 				
 				// Double-check that this order number doesn't exist (extra safety)
 				$qtxt = "SELECT id FROM ordrer WHERE ordrenr = '$ordrenr' AND art = '$art'";
 				$check_r = db_fetch_array(db_select($qtxt, __FILE__ . " linje " . __LINE__));
 				
-				if (!$check_r['id']) {
+				if (!$check_r || !$check_r['id']) {
 					// Order number is unique, commit transaction and return
 					transaktion('commit');
 					return $ordrenr;
 				} else {
-					// Order number already exists, increment and try again
+					// Order number already exists (shouldn't happen with proper locking)
+					// Increment and retry
 					$ordrenr++;
 					usleep(rand(10000, 50000)); // Small random delay to reduce contention
 				}
@@ -2298,6 +2303,12 @@ if (!function_exists('get_next_invoice_number')) {
 					}
 					if ($fakturanr < 1) {
 						$fakturanr = 1;
+					}
+					
+					// If order ID is provided, set the fakturanr on the order NOW while table is locked
+					// This prevents race conditions between getting and setting the number
+					if ($id) {
+						db_modify("UPDATE ordrer SET fakturanr='$fakturanr' WHERE id='$id'", __FILE__ . " linje " . __LINE__);
 					}
 					
 					// Invoice number is unique, commit transaction and return

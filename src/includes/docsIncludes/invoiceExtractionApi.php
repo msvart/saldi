@@ -23,9 +23,19 @@
 function extractInvoiceData($filePath, $invoiceId = null) {
 	// Get API URL from settings or use default
 	global $db;
+	
+/* 	// include connect to get master DB
+	include "connect.php";
+
+	$qtxt = "SELECT var_value FROM settings WHERE var_name = 'apikey' AND var_grp = 'app_api'";
+	if ($r = db_fetch_array(db_select($qtxt, __FILE__ . " linje " . __LINE__))) {
+		$apiKey = $r['var_value'];
+	}
+
+	// include online.php to get user DB
+	include "online.php"; */
 	$apiUrl = "http://72.62.59.20:5000/extract-invoice";
 	$apiKey = "change-me-in-production";
-	
 	// Try to get API URL from settings
 	/* $qtxt = "SELECT var_value FROM settings WHERE var_name = 'invoiceExtractionApiUrl' AND var_grp = 'api'";
 	if ($r = db_fetch_array(db_select($qtxt, __FILE__ . " linje " . __LINE__))) {
@@ -166,7 +176,6 @@ function extractInvoiceData($filePath, $invoiceId = null) {
 	
 	// Execute request
 	$response = curl_exec($ch);
-	file_put_contents("invoiceExtractionApi.json", $response);
 	$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 	$curlError = curl_error($ch);
 	curl_close($ch);
@@ -210,20 +219,39 @@ function extractInvoiceData($filePath, $invoiceId = null) {
 		
 		// Get invoice_date
 		if (isset($extractedData['invoice_date'])) {
-			$date = $extractedData['invoice_date'];
-			// Convert date from DD-MM-YY to YYYY-MM-DD format
-			if (preg_match('/^(\d{2})-(\d{2})-(\d{2})$/', $date, $matches)) {
+			$rawDate = $extractedData['invoice_date'];
+			$date = null;
+			
+			// Try to convert date to YYYY-MM-DD format
+			// Handle DD-MM-YY format first
+			if (preg_match('/^(\d{2})[-\/](\d{2})[-\/](\d{2})$/', $rawDate, $matches)) {
 				$day = $matches[1];
 				$month = $matches[2];
 				$year2digit = $matches[3];
-				// Convert 2-digit year to 4-digit (assume 20xx for years 00-99)
 				$year4digit = '20' . $year2digit;
 				$date = $year4digit . '-' . $month . '-' . $day;
 			}
-			// Get vendor
-			if (isset($extractedData['vendor'])) {
-				$vendor = $extractedData['vendor'];
+			// Handle DD-MM-YYYY format
+			elseif (preg_match('/^(\d{2})[-\/](\d{2})[-\/](\d{4})$/', $rawDate, $matches)) {
+				$day = $matches[1];
+				$month = $matches[2];
+				$year = $matches[3];
+				$date = $year . '-' . $month . '-' . $day;
 			}
+			// Use strtotime for other formats (handles "January 26, 2026", "2026-01-26", etc.)
+			else {
+				$timestamp = strtotime($rawDate);
+				if ($timestamp !== false && $timestamp > 0) {
+					$date = date('Y-m-d', $timestamp);
+				} else {
+					$date = $rawDate; // Keep original if parsing fails
+				}
+			}
+		}
+		
+		// Get vendor
+		if (isset($extractedData['vendor'])) {
+			$vendor = $extractedData['vendor'];
 		}
 	}
 	
@@ -237,7 +265,6 @@ function extractInvoiceData($filePath, $invoiceId = null) {
 	}
 	
 	// No data extracted
-	error_log("Invoice extraction API returned no extractable data");
 	return null;
 }
 

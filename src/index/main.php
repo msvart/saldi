@@ -455,11 +455,11 @@ console.log('Locaiton', this.contentWindow.document.location.href);
       }
     }
 
-    iframe.src = (location + "").split("/").splice(0, 4).join("/") + uri
+    iframe.src = (location + "").split("/").splice(0, 3).join("/") + uri
   }
 
   const redirect_uri = (uri) => {
-    window.location = (location + "").split("/").splice(0, 4).join("/") + uri
+    window.location = (location + "").split("/").splice(0, 3).join("/") + uri
   }
 
   // Check for page reloads and manage inital load of iframe

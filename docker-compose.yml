@@ -1,7 +1,9 @@
 services:
   app:
-    image: danosoft/saldi:latest
-    container_name: saldi_app
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: saldi_app_dev
     ports:
       - "${SALDI_PORT:-8080}:80"
     environment:
@@ -12,7 +14,5 @@ services:
       DB_USER: ${DB_USER:?set DB_USER}
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
     volumes:
-      - ./saldibilag:/var/www/html/saldibilag
-      - ./backup:/backup
-      - ./saldi_logolib:/var/www/html/logolib
+      - ./src:/var/www/html
     restart: always
